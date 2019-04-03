@@ -2091,11 +2091,9 @@ def main():
     
     global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteSave, createBtn, analyzeBtn, transferBtn, noteField, label_transcription, bdpl_home, bdpl_resources, home_dir
     
-    home_dir = 'C:\\BDPL'
+    home_dir = 'Z:\\'
     bdpl_home = 'C:\\BDPL'
     bdpl_resources = os.path.join(bdpl_home, 'resources')
-    
-    print '\n\nNOTE: THIS PROGRAM IS FOR TESTING--IT CURRENTLY SAVES FILES TO C:\BDPL'
     
     window = Tk()
     window.title("Indiana University Library Born-Digital Preservation Lab")
