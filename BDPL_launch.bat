@@ -22,7 +22,7 @@ IF NOT EXIST Z: (
 CLS
 TYPE %2\scripts\bdpl.txt
 python %2\scripts\bdpl_ingest.py
-
+EXIT
 
 :No1
 ECHO Missing local directory argument
