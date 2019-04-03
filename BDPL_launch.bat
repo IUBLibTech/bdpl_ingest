@@ -8,7 +8,7 @@ ECHO.
 ECHO.
 ECHO.
 
-
+setlocal EnableDelayedExpansion
 IF NOT EXIST Z: (
   REM Get username
   SET /P _username="Enter your IU username: "
@@ -16,7 +16,7 @@ IF NOT EXIST Z: (
   REM Server passed in as CMD.EXE arg
   
   REM Connect to shared drive
-  NET USE Z: %1 /user:ads\%_username% *
+  NET USE Z: %1 /user:ads\!_username! *
 )
 
 CLS
@@ -28,8 +28,10 @@ python %2\scripts\bdpl_ingest.py
 ECHO Missing local directory argument
 ECHO.
 PAUSE
+EXIT
 
 :No2
 ECHO Missing server address
 ECHO.
 PAUSE
+EXIT
