@@ -5,7 +5,7 @@ ECHO.
 ECHO.
 
 if "%1" == "" (
-    ECHO Add server as argument
+    ECHO Add server address as argument
 )   else (
     ECHO %1
 )
