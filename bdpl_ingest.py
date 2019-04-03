@@ -395,7 +395,7 @@ def TransferContent():
                 ffmpegout = os.path.join(files_dir, '%s-%s.mpg' % (barcode.get(), str(title).zfill(2)))
                 ffmpeg_cmd = 'ffmpeg -nostdin -loglevel warning -report -stats -i "concat:%s" -c copy -target ntsc-dvd %s' % ('|'.join(titlelist), ffmpegout)
                 
-                print '\n\n\tGenerating title %s of %s: %s\n\n' % (str(title), str(len(titlelist)), ffmpegout)
+                print '\n\n\tGenerating title %s of %s: %s\n\n' % (str(title), str(titlecount), ffmpegout)
                 
                 exitcode = subprocess.call(ffmpeg_cmd, shell=True)
                     
