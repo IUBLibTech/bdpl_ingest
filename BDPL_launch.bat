@@ -1,5 +1,12 @@
 @ECHO OFF
-TYPE C:\BDPL\scripts\bdpl.txt
+
+if "%2" == "" (
+    ECHO Add local address of files
+)   else (
+    ECHO %1
+)
+
+TYPE %2\scripts\bdpl.txt
 ECHO.
 ECHO.
 ECHO.
@@ -21,8 +28,8 @@ IF NOT EXIST Z: (
 )
 
 CLS
-TYPE C:\BDPL\scripts\bdpl.txt
-python C:\BDPL\scripts\bdpl_ingest.py
+TYPE %2\scripts\bdpl.txt
+python %2\scripts\bdpl_ingest.py
 
 
 
