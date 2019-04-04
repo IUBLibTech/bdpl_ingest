@@ -2055,6 +2055,8 @@ def check_progress():
 
 def move_media_images():
     media_image_dir = bdpl_vars()['media_image_dir']
+    unit_home = bdpl_vars()['unit_home']
+    media_pics = bdpl_vars()['media_pics']
     
     if unit.get() == '':
         '\n\nError; please make sure you have entered a 3-character unit abbreviation.'
@@ -2068,7 +2070,6 @@ def move_media_images():
     bad_file_list = []
     for f in os.listdir(media_image_dir):
         if os.path.exists(os.path.join(unit_home, f.split('-')[0])):
-            media_pics = bdpl_vars()['media_pics']
             if not os.path.exists(media_pics):
                 os.makedirs(media_pics)
             shutil.move(os.path.join(media_image_dir, f), media_pics)
