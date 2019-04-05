@@ -21,17 +21,17 @@ IF NOT EXIST Z: (
 
 CLS
 TYPE %2\scripts\bdpl.txt
-python %2\scripts\bdpl_ingest.py
+"C:\Python27\python.exe" %2\scripts\bdpl_ingest.py
 EXIT
 
 :No1
-ECHO Missing local directory argument
+ECHO Missing server address
 ECHO.
 PAUSE
 EXIT
 
 :No2
-ECHO Missing server address
+ECHO Missing local directory argument
 ECHO.
 PAUSE
 EXIT
