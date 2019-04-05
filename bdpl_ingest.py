@@ -35,7 +35,12 @@ import glob
 # from dfxml project
 import Objects
 
-def check_premis(premis_list, term, key_term):
+def check_premis(term, key_term):
+    #check to see if an event is already in our premis list--i.e., it's been successfully completed.
+ 
+    #set up premis_list
+    premis_list = cPickle_load('premis_list')
+    
     #check to see if an event is already in our premis list--i.e., it's been successfully completed.
     s = set((i['%s' % key_term] for i in premis_list))
     
@@ -152,6 +157,10 @@ def cPickle_dump(list_name, list_contents):
             cPickle.dump(list_contents, file)
 
 def secureCopy(file_source, file_destination):
+    if not os.path.exists(file_source):
+        print '\n\nThis file source does not appear to exist: "%s"\n\nPlease verify the correct source has been identified.' % file_source
+        return
+    
     #function takes the file source and destination as well as  a specific premis event to be used in documenting action
     print '\n\nFILE REPLICATION: TERACOPY\n\tSOURCE: %s \n\tDESTINATION: %s' % (file_source, file_destination)
     
@@ -621,6 +630,11 @@ def run_antivirus(files_dir, log_dir, metadata):
     
     print '\n\nVIRUS SCAN: MpCmdRun.exe\n\n'
     
+    #return if virus scan already run
+    if check_premis('virus check', 'eventType'):
+        print '\n\nVirus scan already completed.'
+        return
+    
     virus_log = os.path.join(log_dir, 'viruscheck-log.txt')
     
     #use location of MpCmdRun.log on workstation to set variables to copy log file
@@ -672,6 +686,11 @@ def run_antivirus(files_dir, log_dir, metadata):
 
 def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
     print '\n\nSENSITIVE DATA SCAN: BULK_EXTRACTOR'
+    
+    #return if b_e was run before
+    if check_premis('PII scan', 'eventType'):
+        print '\n\nSensitive data scan already completed.'
+        return
     
     try:
         os.makedirs(bulkext_dir)
@@ -1367,7 +1386,10 @@ def checkFiles(some_dir):
         return True
 
 def produce_dfxml(target):
-
+    #check if the output file exists AND if the action was recorded in PREMIS; if so, return
+    if os.path.exists(dfxml_output) and check_premis('message digest calculation', 'eventType'):
+        return
+    
     dfxml_output = bdpl_vars()['dfxml_output']
     
     timestamp = str(datetime.datetime.now())
@@ -1470,7 +1492,10 @@ def dir_tree(target):
     cPickle_dump('premis_list', premis_list)
 
 def format_analysis(files_dir, reports_dir, log_dir, metadata, html):
-
+    #return if Siegfried already run
+    if check_premis('format identification', 'eventType'):
+        return
+    
     siegfried_db = os.path.join(metadata, 'siegfried.sqlite')
     conn = sqlite3.connect(siegfried_db)
     conn.text_factory = str  # allows utf-8 data to be stored
@@ -1783,9 +1808,9 @@ def writeSpreadsheet():
     
     #pull in other information about transfer: timestamp, method, outcome
     temp_dict = {}
-    if check_premis(premis_list, 'disk image creation', 'eventType'):
+    if check_premis('disk image creation', 'eventType'):
         writePremisToExcel(ws, newrow, 'disk image creation', premis_list)
-    elif check_premis(premis_list, 'replication', 'eventType'):
+    elif check_premis('replication', 'eventType'):
         writePremisToExcel(ws, newrow, 'replication', premis_list)
     else:
         pass
@@ -2103,7 +2128,7 @@ def main():
     
     global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteSave, createBtn, analyzeBtn, transferBtn, noteField, label_transcription, bdpl_home, bdpl_resources, home_dir
     
-    home_dir = 'C:\\BDPL'
+    home_dir = 'Z:\\'
     bdpl_home = 'C:\\BDPL'
     bdpl_resources = os.path.join(bdpl_home, 'resources')
     
