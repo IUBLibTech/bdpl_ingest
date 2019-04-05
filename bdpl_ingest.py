@@ -2081,13 +2081,6 @@ def move_media_images():
     else:
         print '\n\nMedia images successfully copied!'
 
-def save_premis():
-    print '\n\nWorking on this...'
-    #if file not in specific location; open file.
-    
-    #if file is there, save and add to premis_list
-    
-
 def main():
     
     global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteSave, createBtn, analyzeBtn, transferBtn, noteField, label_transcription, bdpl_home, bdpl_resources, home_dir
