@@ -1272,7 +1272,7 @@ def print_premis(premis_path):
 
     PREMIS = "{%s}" % PREMIS_NAMESPACE
 
-    NSMAP = {'PREMIS' : PREMIS_NAMESPACE,
+    NSMAP = {'premis' : PREMIS_NAMESPACE,
             "xsi": "http://www.w3.org/2001/XMLSchema-instance",
             "xlink": "http://www.w3.org/1999/xlink"}
 
