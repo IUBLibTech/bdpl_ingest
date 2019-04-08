@@ -464,7 +464,8 @@ def TransferContent():
             
             print '\n\n\tGenerating session %s of %s: %s\n\n' % (str(x), str(sessions), cdr_bin)
             
-            cdr_cmd = 'cdrdao read-cd --read-raw --datafile %s --device %s --driver generic-mmc-raw -v 1 %s' % (cdr_bin, drive_id, cdr_toc)
+            #create separate bin/cue for each session
+            cdr_cmd = 'cdrdao read-cd --read-raw --session %s --datafile %s --device %s --driver generic-mmc-raw -v 1 %s' % (str(x), cdr_bin, drive_id, cdr_toc)
             
             timestamp = str(datetime.datetime.now())
             
@@ -480,7 +481,7 @@ def TransferContent():
             
             premis_list.append(premis_dict(timestamp, 'metadata modification', exitcode2, t2c_cmd, t2c_ver))
             
-            #place a copy of the .cue file in files_dir for the forthcoming WAV
+            #place a copy of the .cue file for the first session in files_dir for the forthcoming WAV; this session will have audio data
             if x == 1:
                 shutil.copy(cue, os.path.join(files_dir, '%s.cue' % barcode.get()))
         
