@@ -453,7 +453,7 @@ def TransferContent():
 
         #read log file to determine # of sessions on disk.
         with open(disk_info_log, 'rb') as f:
-            sessions = int(f.read().splitlines()[21].split(':')[1].strip())
+            sessions = int(f.read().splitlines()[20].split(':')[1].strip())
         
         t2c_ver = subprocess.check_output('toc2cue -V', shell=True).strip()
         
