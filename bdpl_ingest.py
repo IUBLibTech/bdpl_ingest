@@ -225,10 +225,7 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
 
     exitcode1 = subprocess.call(copycmd1, shell=True)
     
-    if checkFiles(image_dir):
-        if os.stat(imagefile).st_size > 0L:
-            exitcode1 = 0
-            premis_list.append(premis_dict(timestamp1, 'disk image creation', exitcode1, copycmd1, migrate_ver))
+    premis_list.append(premis_dict(timestamp1, 'disk image creation', exitcode1, copycmd1, migrate_ver))
     
     #new timestamp for second pass (recommended by ddrescue developers)
     timestamp2 = str(datetime.datetime.now())
