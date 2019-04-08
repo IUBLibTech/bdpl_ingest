@@ -1389,11 +1389,11 @@ def checkFiles(some_dir):
         return True
 
 def produce_dfxml(target):
+    dfxml_output = bdpl_vars()['dfxml_output']
+    
     #check if the output file exists AND if the action was recorded in PREMIS; if so, return
     if os.path.exists(dfxml_output) and check_premis('message digest calculation', 'eventType'):
         return
-    
-    dfxml_output = bdpl_vars()['dfxml_output']
     
     timestamp = str(datetime.datetime.now())
     
@@ -2029,6 +2029,7 @@ def verify_barcode():
             
             if os.path.exists(os.path.join(bdpl_vars()['metadata'], '%s-premis.xml' % barcode.get())):
                 print '\n\nNOTE: this item barcode has completed the entire ingest workflow.  Consult with the digital preservation librarian if you believe additional procedures are needed.'
+                shutil.rmtree(bdpl_vars()['temp_dir'])
                 return False
             else:
                 premis_list = cPickle_load('premis_list')
