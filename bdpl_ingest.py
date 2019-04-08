@@ -459,8 +459,8 @@ def TransferContent():
         
         #for each session, create a bin/toc file
         for x in range(1, (sessions+1)):
-            cdr_bin = os.path.join(image_dir, "%s-%s.bin") % (barcode.get(), str(sessions).zfill(2))
-            cdr_toc = os.path.join(image_dir, "%s-%s.toc") % (barcode.get(), str(sessions).zfill(2))
+            cdr_bin = os.path.join(image_dir, "%s-%s.bin") % (barcode.get(), str(x).zfill(2))
+            cdr_toc = os.path.join(image_dir, "%s-%s.toc") % (barcode.get(), str(x).zfill(2))
             
             print '\n\n\tGenerating session %s of %s: %s\n\n' % (str(x), str(sessions), cdr_bin)
             
