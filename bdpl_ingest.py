@@ -1797,7 +1797,7 @@ def writeSpreadsheet():
     ws.cell(row=newrow, column=3, value = bc_dict['current_collection'].encode('utf-8'))
     ws.cell(row=newrow, column=4, value = bc_dict['current_coll_id'].encode('utf-8'))
     ws.cell(row=newrow, column=5, value = bc_dict['current_creator'].encode('utf-8'))
-    ws.cell(row=newrow, column=6, value = bc_dict['phys_loc'].encode('utf-8'))
+    ws.cell(row=newrow, column=6, value = str(bc_dict['phys_loc']))
     ws.cell(row=newrow, column=7, value = bc_dict['current_source'].encode('utf-8'))
     #allow BDPL tech to update label transcription and save to spreadsheet
     #ws.cell(row=newrow, column=8, value = bc_dict['label_transcript'].encode('utf-8'))
