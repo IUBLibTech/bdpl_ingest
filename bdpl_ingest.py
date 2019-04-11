@@ -1468,9 +1468,11 @@ def disktype_info(imagefile, reports_dir):
         cPickle_dump('premis_list', premis_list)
     
     #now get list of file systems on disk
+    fs_list = []
     with open(disktype_output, 'rb') as f:
-        fs_list = [x for x in f.read().splitlines() if 'file system' in x]
-    
+        for line in f:
+            if 'file system' in line:
+                    fs_list.append(line.lstrip().split(' file system', 1)[0])
     return fs_list
 
 def dir_tree(target):
@@ -1568,12 +1570,13 @@ def analyzeContent():
         #generate DFXML with checksums
         produce_dfxml(imagefile)
         
-        #fix dates from files replicated by tsk_recover; avoid HFS, UDF, and ISO9660 images
+        #fix dates from files replicated by tsk_recover; first, gete a list of filesystems identified by Disktype
         fs_list = disktype_info(imagefile, reports_dir)
-        for fs in ['UDF', 'ISO9660', 'HFS']:
-            if any(fs in item for item in fs_list):
-                fix_dates(files_dir, dfxml_output)
-                break
+        
+        #now see if our list of file systems include either HFS, UDF, or ISO9660 images; these files were replicated using tools other than tsk_recover and don't require date fixes.
+        check_list = ['UDF', 'ISO9660', 'HFS']
+        if not any(fs in ' '.join(fs_list) for fs in check_list):
+            fix_dates(files_dir, dfxml_output)
     
         #document directory structure
         dir_tree(files_dir)
