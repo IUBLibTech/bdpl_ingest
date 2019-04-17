@@ -4,14 +4,14 @@ Python tool for the initial ingest and SIP creation of content in the Indiana Un
 This project was inspired by and includes significant elements of [Brunnhilde](https://github.com/timothyryanwalsh/brunnhilde) and [Disk Image Processor](https://github.com/CCA-Public/diskimageprocessor), both &copy; by [Timothy Walsh](https://www.bitarchivist.net/) and released under an MIT License.
 
 ## Overview
-bdpl_ingest provides a graphical user interface to assist BDPL with the initial ingest and Submission Information Package (SIP) creation for digital materials acquired by the Indiana University Libraries.  It provides a graphical user interface to guide staff through transfer and analysis workflow steps as determined by the type of content. The tool generates log files for each preservation action and also records events in a basic Preservation Metadata: Implementation Strategies (PREMIS) XML file.
+bdpl_ingest provides a graphical user interface to assist BDPL staff with the initial ingest and Submission Information Package (SIP) creation for digital materials acquired by the Indiana University Libraries.  It is designed to guide staff through transfer and analysis workflow steps as determined by the type of content. The tool generates log files for each preservation action and also records events in a basic Preservation Metadata: Implementation Strategies (PREMIS) XML file.
 
 bdpl_ingest is currently used on Windows 10 workstations managed by IU Libraries Desktop Support, but could be adapted to run in a Linux or Mac environment with the substitution of appropriate tools for Windows-specific resources. 
 
 ## Preservation Events
 bdpl_ingest employs a micro-service design to address four main job types:
-* __Disk image creation__: use cases involving digital material stored on physical media, including 5.25" floppies, 3.5" floppies, zip disks, optical media, USB drives, and hard drives.
-* __Copy__: use cases where disk imaging is not appropriate or where content has arrived via email, network transfer, or download.
+* __Disk images__: use cases involving digital material stored on physical media, including 5.25" floppies, 3.5" floppies, zip disks, optical media, USB drives, and hard drives.
+* __Copy only__: use cases where disk imaging is not appropriate or where content has arrived via email, network transfer, or download.
 * __DVD__: use cases where moving image content is stored as DVD-Video on optical media.
 * __CDDA__: use cases where sound recordings are stored as Compact Disk Digital Audio on optical media.
 
