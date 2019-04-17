@@ -28,7 +28,7 @@ Each job type is comprised of two main steps: transfer and migration. Significan
     * _cdparanoia_ (production of single .wav and cue files for CDDA use cases)
     * _ffmpeg_ (production of one .mpeg per title for DVD-Video use cases, with content information provided by _lsdvd_)
 * Analysis: 
-  * Virus scan: _mpcmdrun.exe_
+  * Virus scan: _mpcmdrun.exe_ (default antivirus program on IU Libraries' managed workstations)
   * Sensitive data scan: _bulk_extractor_
   * Forensic feature analysis:
     * _disktype_ (document disk image file system information)
