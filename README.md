@@ -1,7 +1,4 @@
 # bdpl_ingest
-Python script for Born Digital Preservation Lab Ingest tool
+Python tool for the initial ingest and SIP creation of content in the Indiana University Libraries' Born Digital Preservation Lab (BDPL).
 
-This project was inspired by and includes elements of Brunnhilde, a Siegfried-based digital archives reporting tool
-github.com/timothyryanwalsh/brunnhilde
-Copyright (c) 2017 Tim Walsh, distributed under The MIT License (MIT)
-http://bitarchivist.net
+This project was inspired by and includes significant elements of [Brunnhilde](https://github.com/timothyryanwalsh/brunnhilde) and [Disk Image Processor](https://github.com/CCA-Public/diskimageprocessor), both &copy; by [Timothy Walsh](https://www.bitarchivist.net/) and released under an MIT License.
