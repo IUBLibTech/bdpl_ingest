@@ -43,23 +43,21 @@ Each job type is comprised of two main steps: transfer and migration. Significan
 bdpl_ingest produces a standardized SIP as well as a report and documentation of ingest procedures.  Each transfer item is identified by  a unique barcode identifier; these typically correspond to an individual storage media item or other transfer (though in some cases, particularly large items may be subudivided in consultation with collecting units).
 
 A barcode folder has the following structure:
-
+```
  [barcode]/
  |
- |_ disk-image/ (if produced)
+ |__ disk-image/ (if produced)
  |
- |_ files/ (including normalized versions of content from DVD-Video and CDDA use cases)
+ |__ files/ (including normalized versions of content from DVD-Video and CDDA use cases)
  |
- |- metadata/
+ |__ metadata/
+    |    [barcode]-dfxml.xml
+    |    [barcode]-premis.xml
     |
-    |_ [barcode]-dfxml.xml
+    |___ logs/
     |
-    |_ [barcode]-premis.xml
-    |
-    |_ logs/
-    |
-    |_ reports/ (including version of Brunnhilde html report)
-    
+    |___ reports/ (including version of Brunnhilde html report)
+```
 In addition, highlevel information about each object and the ingest process is saved to a spreadsheet to assist collecting units with the review and appraisal of content before it is saved to secure storage to await final ingest and AIP creation procedures.
 
 ## Dependencies
