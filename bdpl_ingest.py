@@ -2103,7 +2103,11 @@ def verify_barcode():
         except OSError as exception:
             if exception.errno != errno.EEXIST:
                 raise
-        shutil.copy(spreadsheet.get(), spreadsheet_copy)
+        #make sure there's not another spreadsheet already in the shipment directory
+        if glob.glob(os.path.join(ship_dir, '*.xlsx')):
+            print('\n\n%s already contains a spreadsheet: %s' % (ship_dir, glob.glob(os.path.join(ship_dir, '*.xlsx')[0])
+        else:
+            shutil.copy(spreadsheet.get(), spreadsheet_copy)
 
     #once we have identified our working spreadsheet (or created it), check data:
     
