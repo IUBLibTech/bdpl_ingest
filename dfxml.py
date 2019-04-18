@@ -270,7 +270,7 @@ class byte_run:
         return self.len % self.sector_size
 
     def decode_xml_attributes(self,attr):
-        for (key,value) in attr.items():
+        for (key,value) in list(attr.items()):
             try:
                 setattr(self,key,int(value))
             except ValueError:
@@ -278,7 +278,7 @@ class byte_run:
 
         
     def decode_sax_attributes(self,attr):
-        for (key,value) in attr.items():
+        for (key,value) in list(attr.items()):
             if key=='bytes': key=='len' # tag changed name; provide backwards compatiability 
             try:
                 setattr(self,key,int(value))
@@ -333,7 +333,7 @@ class dftime(ComparableMixin):
         if sys.version_info >= (3,0):
             _basestring = str
         else:
-            _basestring = basestring
+            _basestring = str
         if isinstance(val, str) or isinstance(val,_basestring):
             #
             #Test for ISO 8601 format - "YYYY-MM-DD" should have hyphen at val[4]
@@ -1383,7 +1383,7 @@ class extentdb:
         """Returns an array of the sectors for a given run"""
         start_sector = run.img_offset/self.sectorsize
         sector_count = self.sectors_for_bytes(run.len)
-        return range(start_sector,start_sector+sector_count)
+        return list(range(start_sector,start_sector+sector_count))
 
     def run_for_sector(self,sector_number,count=1):
         """Returns the run for a specified sector, and optionally a count of sectors"""
@@ -1440,7 +1440,7 @@ class extentdb:
 
     def sectors_not_in_db(self,run):
         """For a given run, return a list of sectors not in the extent db"""
-        return filter(lambda x:not self.intersects_sector(x),self.sectors_for_run(run))
+        return [x for x in self.sectors_for_run(run) if not self.intersects_sector(x)]
 
 
 def read_dfxml(xmlfile=None,imagefile=None,flags=0,callback=None,preserve_fis=False):
@@ -1604,7 +1604,7 @@ if __name__=="__main__":
         warn = ""
         if result != want:
             warn = " (!)"
-        print("a=%s b=%s want=%s equal=%s%s" % (da,db,want,result,warn))
+        print(("a=%s b=%s want=%s equal=%s%s" % (da,db,want,result,warn)))
     
     def check_greater(a,b,want=None):
         da = dftime(a)
@@ -1613,7 +1613,7 @@ if __name__=="__main__":
         warn = ""
         if result != want:
             warn = " (!)"
-        print("a=%s b=%s want=%s greater=%s%s" % (da,db,want,result,warn))
+        print(("a=%s b=%s want=%s greater=%s%s" % (da,db,want,result,warn)))
 
     if options.regress:
         print("Testing unicode value parsing.")
@@ -1621,7 +1621,7 @@ if __name__=="__main__":
         test_unicode_string = "\xae"
         if sys.version_info.major == 2:
             #The test string doesn't quite get defined right that way in Python 2
-            test_unicode_string = unicode(test_unicode_string, encoding="latin-1")
+            test_unicode_string = str(test_unicode_string, encoding="latin-1")
             test_unicode_string_escaped = test_unicode_string.encode("unicode_escape")
             test_base64_bytes = base64.b64encode(test_unicode_string_escaped)
         elif sys.version_info.major == 3:
@@ -1665,9 +1665,9 @@ if __name__=="__main__":
         try:
             assert db.intersects(byte_run(0,5))==byte_run(0,5)
         except:
-            print(type(cmp))
-            print(db.intersects(byte_run(0,5)))
-            print(byte_run(0,5))
+            print((type(cmp)))
+            print((db.intersects(byte_run(0,5))))
+            print((byte_run(0,5)))
             raise
         assert db.intersects(byte_run(0,1))
         assert db.intersects(byte_run(2,3))

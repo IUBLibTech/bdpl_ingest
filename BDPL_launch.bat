@@ -21,7 +21,7 @@ IF NOT EXIST Z: (
 
 CLS
 TYPE %2\scripts\bdpl.txt
-"C:\Python27\python.exe" %2\scripts\bdpl_ingest.py
+python %2\python3\bdpl_ingest.py
 EXIT
 
 :No1

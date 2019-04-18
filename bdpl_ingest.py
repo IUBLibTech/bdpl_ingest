@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# Python 3
 
 """
 
@@ -9,6 +10,7 @@ Copyright (c) 2017 Tim Walsh, distributed under The MIT License (MIT)
 http://bitarchivist.net
 
 """
+
 from collections import OrderedDict
 import csv
 import datetime
@@ -24,10 +26,11 @@ import uuid
 from lxml import etree as ET
 import tempfile
 import fnmatch
-from Tkinter import *
-import tkFileDialog
+from tkinter import *
+import tkinter.filedialog
+from tkinter import ttk
 import glob
-import cPickle
+import pickle
 import time
 import openpyxl
 import glob
@@ -39,7 +42,7 @@ def check_premis(term, key_term):
     #check to see if an event is already in our premis list--i.e., it's been successfully completed.
  
     #set up premis_list
-    premis_list = cPickle_load('premis_list')
+    premis_list = pickleLoad('premis_list')
     
     #check to see if an event is already in our premis list--i.e., it's been successfully completed.
     s = set((i['%s' % key_term] for i in premis_list))
@@ -64,12 +67,15 @@ def first_run():
     
     #now create folders
     createFolders()
+    
 
 def bdpl_vars():
     #this function creates folder variables
     vars = {}
-    vars['unit_home'] = os.path.join(home_dir, '%s' % unit.get())
-    vars['destination'] = os.path.join(vars['unit_home'], "%s" % barcode.get())
+    vars['unit_home'] = os.path.join(home_dir, unit.get(), 'ingest' )
+    vars['ship_dir'] = os.path.join(vars['unit_home'], '%s' % shipDateCombo.get())
+    vars['target'] = os.path.join(vars['ship_dir'], "%s" % barcode.get())
+    vars['destination'] = "X:\\"
     vars['image_dir'] = os.path.join(vars['destination'], "disk-image")
     vars['files_dir'] = os.path.join(vars['destination'], "files")
     vars['metadata'] = os.path.join(vars['destination'], "metadata")
@@ -80,18 +86,24 @@ def bdpl_vars():
     vars['dfxml_output'] = os.path.join(vars['metadata'], '%s-dfxml.xml' % barcode.get())
     vars['bulkext_dir'] = os.path.join(vars['temp_dir'], 'bulk_extractor')
     vars['bulkext_log'] = os.path.join(vars['log_dir'], 'bulkext-log.txt')
-    vars['media_pics'] = os.path.join(vars['metadata'], 'media-image')
     vars['media_image_dir'] = os.path.join(home_dir, 'media-images', '%s' % unit.get())
     
     return vars
 
 def createFolders():       
     #create folders
+    target = bdpl_vars()['target']
+    
     try:
-        os.makedirs(bdpl_vars()['destination'])
+        os.makedirs(target)
     except OSError as exception:
         if exception.errno != errno.EEXIST:
             raise
+    
+    #set up mapped folder
+    cmd = 'SUBST X: %s' % target
+    if not os.path.exists('X:\\'):
+        subprocess.check_output(cmd, shell=True)
 
     try:
         os.makedirs(bdpl_vars()['image_dir'])
@@ -135,34 +147,35 @@ def createFolders():
         if exception.errno != errno.EEXIST:
             raise
     
-def cPickle_load(list_name):
+def pickleLoad(list_name):
     temp_file = os.path.join(bdpl_vars()['temp_dir'], '%s.txt' % list_name)
     if list_name == "premis_list":
         temp_list = []
     else:
         temp_list = {}
-    if os.path.exists(temp_file):
+    #make sure there's something in the file
+    if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
         with open(temp_file, 'rb') as file:
-            temp_list = cPickle.load(file)
+            temp_list = pickle.load(file)
     return temp_list
 
-def cPickle_dump(list_name, list_contents):
-    temp_dir = bdpl_vars()['temp_dir']
+def pickleDump(list_name, list_contents):
+    temp_dir = os.path.join(bdpl_vars()['target'], 'temp')
     temp_file = os.path.join(temp_dir, '%s.txt' % list_name)
      
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
         
     with open(temp_file, 'wb') as file:
-            cPickle.dump(list_contents, file)
+        pickle.dump(list_contents, file)
 
 def secureCopy(file_source, file_destination):
     if not os.path.exists(file_source):
-        print '\n\nThis file source does not appear to exist: "%s"\n\nPlease verify the correct source has been identified.' % file_source
+        print('\n\nThis file source does not appear to exist: "%s"\n\nPlease verify the correct source has been identified.' % file_source)
         return
     
     #function takes the file source and destination as well as  a specific premis event to be used in documenting action
-    print '\n\nFILE REPLICATION: TERACOPY\n\tSOURCE: %s \n\tDESTINATION: %s' % (file_source, file_destination)
+    print('\n\nFILE REPLICATION: TERACOPY\n\tSOURCE: %s \n\tDESTINATION: %s' % (file_source, file_destination))
     
     #set variables for premis
     timestamp = str(datetime.datetime.now())             
@@ -173,9 +186,9 @@ def secureCopy(file_source, file_destination):
     copycmd = 'TERACOPY COPY "%s" %s /SkipAll /CLOSE' % (file_source, file_destination)
     
     try:
-        exitcode = subprocess.call(copycmd, shell=True)
+        exitcode = subprocess.call(copycmd, shell=True, text=True)
     except subprocess.CalledProcessError as e:
-        print '\n\nFILE REPLICATION FAILED:\n\n%s' % e
+        print('\n\nFILE REPLICATION FAILED:\n\n%s' % e)
         return
     
     #check to see if files are actually present (TeraCopy may complete without copying...)
@@ -183,26 +196,26 @@ def secureCopy(file_source, file_destination):
         return
     
     #need to find Teracopy SQLITE db and export list of copied files to csv log file
-    list_of_files = glob.glob(os.path.join(os.path.expandvars('C:\Users\%USERNAME%\AppData\Roaming\TeraCopy\History'), '*'))
+    list_of_files = glob.glob(os.path.join(os.path.expandvars('C:\\Users\%USERNAME%\AppData\Roaming\TeraCopy\History'), '*'))
     tera_db = max(list_of_files, key=os.path.getctime)
     log_cmd = 'sqlite3 -header -csv %s "SELECT * from Files;"' % tera_db
     tera_log = os.path.join(bdpl_vars()['log_dir'], 'teracopy_log.csv')
-    with open(tera_log, 'wb') as output:
-        migrate_exit = subprocess.call(log_cmd, stdout=output, shell=True)
+    with open(tera_log, 'w') as output:
+        migrate_exit = subprocess.call(log_cmd, stdout=output, shell=True, text=True)
     
     #capture premis
-    premis_list = cPickle_load('premis_list')
-    premis_list.append(premis_dict(timestamp, 'replication', exitcode, copycmd, migrate_ver))
-    cPickle_dump('premis_list', premis_list)
+    premis_list = pickleLoad('premis_list')
+    premis_list.append(premis_dict(timestamp, 'replication', exitcode, copycmd, 'Created a copy of an object that is, bit-wise, identical to the original.', migrate_ver))
+    pickleDump('premis_list', premis_list)
     
-    print '\n\nFILE REPLICATION COMPLETED; PROCEED TO NEXT STEP.'
+    print('\n\nFILE REPLICATION COMPLETED; PROCEED TO NEXT STEP.')
 
 def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     
-    print '\n\nDISK IMAGE CREATION: DDRESCUE\n\tSOURCE: %s \n\tDESTINATION: %s\n\n' % (sourceDevice.get(), imagefile)
+    print('\n\nDISK IMAGE CREATION: DDRESCUE\n\tSOURCE: %s \n\tDESTINATION: %s\n\n' % (sourceDevice.get(), imagefile))
     
     #set up premis list
-    premis_list = cPickle_load('premis_list')
+    premis_list = pickleLoad('premis_list')
     
     #create variables for mapfile and ddrescue commands (first and second passes)
     mapfile = os.path.join(temp_dir, '%s.map' % barcode.get())
@@ -216,40 +229,40 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     ddrescue_reads1 = os.path.join(log_dir, 'ddrescue_reads1.txt')
     ddrescue_reads2 = os.path.join(log_dir, 'ddrescue_reads2.txt')
     
-    migrate_ver = subprocess.check_output('ddrescue -V', shell=True).split('\n', 1)[0]  
+    migrate_ver = subprocess.check_output('ddrescue -V', shell=True, text=True).split('\n', 1)[0]  
     timestamp1 = str(datetime.datetime.now())
     
     copycmd1 = 'ddrescue -n --log-events=%s --log-rates=%s --log-reads=%s %s %s %s' % (ddrescue_events1, ddrescue_rates1, ddrescue_reads1, sourceDevice.get(), imagefile, mapfile)
     
     #run commands via subprocess; per ddrescue instructions, we need to run it twice    
 
-    exitcode1 = subprocess.call(copycmd1, shell=True)
+    exitcode1 = subprocess.call(copycmd1, shell=True, text=True)
     
-    premis_list.append(premis_dict(timestamp1, 'disk image creation', exitcode1, copycmd1, migrate_ver))
+    premis_list.append(premis_dict(timestamp1, 'disk image creation', exitcode1, copycmd1, 'First pass; extracted a disk image from the physical information carrier.', migrate_ver))
     
     #new timestamp for second pass (recommended by ddrescue developers)
     timestamp2 = str(datetime.datetime.now())
     
     copycmd2 = 'ddrescue -d -r2 --log-events=%s --log-rates=%s --log-reads=%s %s %s %s' % (ddrescue_events2, ddrescue_rates2, ddrescue_reads2, sourceDevice.get(), imagefile, mapfile)
     
-    exitcode2 = subprocess.call(copycmd2, shell=True)
+    exitcode2 = subprocess.call(copycmd2, shell=True, text=True)
     
     if checkFiles(image_dir):
-        if os.stat(imagefile).st_size > 0L:
-            print '\n\nDISK IMAGE CREATED.'
+        if os.stat(imagefile).st_size > 0:
+            print('\n\nDISK IMAGE CREATED.')
             exitcode2 = 0
-            premis_list.append(premis_dict(timestamp2, 'disk image creation', exitcode2, copycmd2, migrate_ver))
+            premis_list.append(premis_dict(timestamp2, 'disk image creation', exitcode2, copycmd2, 'Second pass; extracted a disk image from the physical information carrier.', migrate_ver))
         else:
-            print '\n\nDISK IMAGE CREATION FAILED\n\n\tIndicate any issues in note to collecting unit.'
+            print('\n\nDISK IMAGE CREATION FAILED\n\n\tIndicate any issues in note to collecting unit.')
     else:
-        print '\n\nDISK IMAGE CREATION FAILED\n\n\tIndicate any issues in note to collecting unit.'
+        print('\n\nDISK IMAGE CREATION FAILED\n\n\tIndicate any issues in note to collecting unit.')
     
     #save premis
-    cPickle_dump('premis_list', premis_list)
+    pickleDump('premis_list', premis_list)
 
 def mediaCheck():
     if mediaStatus.get() == False:
-        print '\n\nMake sure that media has been inserted/attached; check the "Media present?" box and continue.'
+        print('\n\nMake sure that media has been inserted/attached; check the "Media present?" box and continue.')
         return False
     else:
         return True
@@ -262,14 +275,15 @@ def TransferContent():
     reports_dir = bdpl_vars()['reports_dir']
     files_dir = bdpl_vars()['files_dir']
     image_dir = bdpl_vars()['image_dir']
+    dfxml_output = bdpl_vars()['dfxml_output']
+    
+    newscreen()
     
     #check that barcode exists on spreadsheet; exit if not wrong
     if not verify_data():
         return
     
-    newscreen()
-    
-    print '\n\nSTEP 1. TRANSFER CONTENT'
+    print('\n\nSTEP 1. TRANSFER CONTENT')
         
     #check to see if content will include disk image; if nothing entered, exit and prompt user to do so        
     if jobType.get() == 'Copy_only':
@@ -286,61 +300,118 @@ def TransferContent():
         #special process for 5.25" floppies: use FC5025
         if sourceDevice.get() == '5.25':
             if disk525.get() == 'N/A':
-                print '\n\nError; be sure to select the appropriate 5.25" floppy disk type from the drop down menu.'
+                print('\n\nError; be sure to select the appropriate 5.25" floppy disk type from the drop down menu.')
                 return
             
-            print '\n\n\DISK IMAGE CREATION: DeviceSideData FC5025\n\tSOURCE: %s \n\tDESTINATION: %s\n\n' % (sourceDevice.get(), imagefile)
+            print('\n\n\DISK IMAGE CREATION: DeviceSideData FC5025\n\tSOURCE: %s \n\tDESTINATION: %s\n\n' % (sourceDevice.get(), imagefile))
             
             #create premis list
-            premis_list = cPickle_load('premis_list')
+            premis_list = pickleLoad('premis_list')
             
             disk_type_options = { 'Apple DOS 3.3 (16-sector)' : 'apple33', 'Apple DOS 3.2 (13-sector)' : 'apple32', 'Apple ProDOS' : 'applepro', 'Commodore 1541' : 'c1541', 'TI-99/4A 90k' : 'ti99', 'TI-99/4A 180k' : 'ti99ds180', 'TI-99/4A 360k' : 'ti99ds360', 'Atari 810' : 'atari810', 'MS-DOS 1200k' : 'msdos12', 'MS-DOS 360k' : 'msdos360', 'North Star MDS-A-D 175k' : 'mdsad', 'North Star MDS-A-D 350k' : 'mdsad350', 'Kaypro 2 CP/M 2.2' : 'kaypro2', 'Kaypro 4 CP/M 2.2' : 'kaypro4', 'CalComp Vistagraphics 4500' : 'vg4500', 'PMC MicroMate' : 'pmc', 'Tandy Color Computer Disk BASIC' : 'coco', 'Motorola VersaDOS' : 'versa' }
   
             timestamp = str(datetime.datetime.now())
             copycmd = 'fcimage -f %s %s | tee -a %s' % (disk_type_options[disk525.get()], imagefile, os.path.join(log_dir, 'fcimage.log'))
 
-            exitcode = subprocess.call(copycmd, shell=True)
+            exitcode = subprocess.call(copycmd, shell=True, text=True)
             
             if exitcode == 0:
-                premis_list.append(premis_dict(timestamp, 'disk image creation', exitcode, copycmd, 'FCIMAGE v1309'))
+                premis_list.append(premis_dict(timestamp, 'disk image creation', exitcode, copycmd, 'Extracted a disk image from the physical information carrier.', 'FCIMAGE v1309'))
                 
             
             else:
                 #FC5025 reports non-0 exitcode if there are any read errors; therefore, if a disk image larger than 0 bytes exists, we will call it a success
-                if os.stat(imagefile).st_size > 0L:
-                    premis_list.append(premis_dict(timestamp, 'disk image creation', 0, copycmd, 'FCIMAGE v1309'))
+                if os.stat(imagefile).st_size > 0:
+                    premis_list.append(premis_dict(timestamp, 'disk image creation', 0, copycmd, 'Extracted a disk image from the physical information carrier.', 'FCIMAGE v1309'))
                 else:
-                    print '\n\nDisk image not successfully created; verify you have selected the correct disk type and try again (if possible).  Otherwise, indicate issues in note to collecting unit.'
+                    print('\n\nDisk image not successfully created; verify you have selected the correct disk type and try again (if possible).  Otherwise, indicate issues in note to collecting unit.')
                     return
-            print '\n\nDISK IMAGE CREATION COMPLETED.'
+            print('\n\nDISK IMAGE CREATION COMPLETED.')
             
             #save premis
-            cPickle_dump('premis_list', premis_list)
+            pickleDump('premis_list', premis_list)
         
         else:
             
             ddrescue_image(temp_dir, log_dir, imagefile, image_dir)
         
-        #now extract/copy files; first, run disktype to determine file systems on image; then check
-        fs_list = disktype_info(imagefile, reports_dir)
+        #now attempt to replicate/extract content from disk image
+        print('\n\nFILE REPLICATION: ')
         
-        if any('HFS' in item for item in fs_list):
-            carve_ver = subprocess.check_output('unhfs', shell=True).split('\n', 1)[0]
-            carve_cmd = 'unhfs -v -resforks APPLEDOUBLE -o "%s" "%s"' % (files_dir, imagefile)
+        #get info on the disk image (fsstat, ils, mmls, and disktype) and generate DFXML
+        disk_image_info(imagefile, reports_dir)
+        
+        #see what kind of filesystems are present
+        fs_list = []
+        with open(disktype_output, 'r') as f:
+            for line in f:
+                if 'file system' in line:
+                    fs_list.append(line.lstrip().split(' file system', 1)[0])
+        
+        #save this list for later...
+        pickleDump('fs_list', fs_list)
+
+        #now parse output to get information on filesystems and (if present) partitions
+        disktype_output = os.path.join(reports_dir, 'disktype.txt')
+        mmls_output = os.path.join(reports_dir, 'mmls.txt')
+        
+        #we will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
+        secureCopy_list = ['UDF', 'ISO9660']
+        unhfs_list = ['osx', 'hfs', 'Apple', 'mfs']
+        
+        #next, we need to see if there are any partitions on the image
+        if os.stat(mmls_output).st_size == 0:
+            print('\n\nNo partitions recognized by mmls.')
             
-            carvefiles(carve_ver, carve_cmd, 'UNHFS', imagefile, files_dir)
+            #if any file systems have been found, copy or extract to /files/ directory
+            
+            if len(fs_list) > 0:
                 
-        elif any('ISO9660' in item for item in fs_list):
-            secureCopy(optical_drive_letter(), files_dir)
+                print('\n\nDisktype has identified the following file systems: ', ', '.join(fs_list))
                 
-        elif any('UDF' in item for item in fs_list):
-            secureCopy(optical_drive_letter(), files_dir)
-                
+                if any(fs in ' '.join(fs_list) for fs in secureCopy_list):
+                    secureCopy(optical_drive_letter(), files_dir)
+
+                elif any(fs in ' '.join(fs_list) for fs in unhfs_list):
+                    carvefiles('unhfs', imagefile, files_dir, '')
+                    
+                else:
+                    carvefiles('tsk_recover', imagefile, files_dir, '')
+                    
+            else:
+                print('\n\nDisktype unable to identify image file system(s)')
+        
+        #if we *do* have an mmls report, then pull our key data points out: slot, start, and description.  Create a dictionary for each partition and then save these to a list
         else:
-            carve_ver = 'tsk_recover: %s ' % subprocess.check_output('tsk_recover -V').strip()
-            carve_cmd = 'tsk_recover -a "%s" "%s"' % (imagefile, files_dir)
+            partition_info = []
+            part_no = 0
+            with open(mmls_output, 'r') as f:
+                print('\n\nmmls identified one or more partitions')
+                
+                #skip the first 4 mmls header lines
+                for line in f.readlines()[5:]:
+                    temp = {}
+                    #only read those lines that have numerical 'slot' info
+                    if any(s.isdigit() for s in re.split(r'\s\s+', line.rstrip())[1]):
+                        temp['part_id'] = str(part_no)
+                        temp['start'] = re.split(r'\s\s+', line.rstrip())[2]
+                        temp['desc'] = re.split(r'\s\s+', line.rstrip())[5]
+                        part_no += 1
+                        #now save this dictionary to our list of partition info
+                        partition_info.append(temp)
             
-            carvefiles(carve_ver, carve_cmd, 'TSK_RECOVER', imagefile, files_dir)
+            #go through the list to identify which need to be handled by unhfs and which by tsk_recover
+            #list of potential descriptions to ID when unhfs is required
+            
+            for part_dict in partition_info:
+                
+                if any(fs in part_dict['desc'] for fs in unhfs_list):
+                    carvefiles('unhfs', imagefile, files_dir, part_dict)
+                                  
+                else:
+                    carvefiles('tsk_recover', imagefile, files_dir, part_dict)
+        
+        print('\n\nFILE REPLICATION COMPLETE; PROCEED TO NEXT STEP')
             
     elif jobType.get() == 'DVD':
         #make sure media is present
@@ -351,7 +422,7 @@ def TransferContent():
         ddrescue_image(temp_dir, log_dir, imagefile, image_dir)
         
         #set up PREMIS list
-        premis_list = cPickle_load('premis_list')
+        premis_list = pickleLoad('premis_list')
         
         #rip copies of each title with ffmpeg        
         ffmpeg_source = "%s\\" % optical_drive_letter()
@@ -360,18 +431,18 @@ def TransferContent():
         lsdvd_temp = os.path.join(temp_dir, 'lsdvd.txt')
         cmd = 'lsdvd -V > %s 2>&1' % lsdvd_temp
         
-        subprocess.check_output(cmd, shell=True)
+        subprocess.check_output(cmd, shell=True, text=True)
         
-        with open(lsdvd_temp, 'rb') as f:
+        with open(lsdvd_temp, 'r') as f:
             lsdvd_ver = f.read().split(' - ')[0]
         
         #now run lsdvd to get info about DVD, including # of titles
         lsdvdout = os.path.join(reports_dir, "%s_lsdvd.xml" % barcode.get())
         timestamp = str(datetime.datetime.now())
         lsdvdcmd = 'lsdvd -Ox -x %s > %s 2> NUL' % (ffmpeg_source, lsdvdout)
-        exitcode = subprocess.call(lsdvdcmd, shell=True)
+        exitcode = subprocess.call(lsdvdcmd, shell=True, text=True)
         
-        premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, lsdvdcmd, lsdvd_ver))
+        premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, lsdvdcmd, 'Extracted content information from DVD, including titles, chapters, audio streams and video.', lsdvd_ver))
         
         #check file to see how many titles are on DVD using lsdvd XML output
         parser = ET.XMLParser(recover=True)
@@ -388,9 +459,9 @@ def TransferContent():
         os.chdir(ffmpeg_temp)
         
         #get ffmpeg version
-        ffmpeg_ver =  '; '.join(subprocess.check_output('ffmpeg -version', shell=True).splitlines()[0:2])
+        ffmpeg_ver =  '; '.join(subprocess.check_output('ffmpeg -version', shell=True, text=True).splitlines()[0:2])
         
-        print '\n\nMOVING IMAGE FILE NORMALIZATION: FFMPEG'
+        print('\n\nMOVING IMAGE FILE NORMALIZATION: FFMPEG')
         
         #loop through titles and rip each one to mpeg using native streams
         for title in range(1, (titlecount+1)):
@@ -401,23 +472,23 @@ def TransferContent():
                 ffmpegout = os.path.join(files_dir, '%s-%s.mpg' % (barcode.get(), str(title).zfill(2)))
                 ffmpeg_cmd = 'ffmpeg -nostdin -loglevel warning -report -stats -i "concat:%s" -c copy -target ntsc-dvd %s' % ('|'.join(titlelist), ffmpegout)
                 
-                print '\n\n\tGenerating title %s of %s: %s\n\n' % (str(title), str(titlecount), ffmpegout)
+                print('\n\n\tGenerating title %s of %s: %s\n\n' % (str(title), str(titlecount), ffmpegout))
                 
-                exitcode = subprocess.call(ffmpeg_cmd, shell=True)
+                exitcode = subprocess.call(ffmpeg_cmd, shell=True, text=True)
                     
-                premis_list.append(premis_dict(timestamp, 'normalization: access version', exitcode, ffmpeg_cmd, ffmpeg_ver))
+                premis_list.append(premis_dict(timestamp, 'normalization', exitcode, ffmpeg_cmd, 'Transformed object to an institutionally supported preservation format (.MPG) with a direct copy of all streams.', ffmpeg_ver))
                 
                 #move and rename ffmpeg log file
                 ffmpeglog = glob.glob(os.path.join(ffmpeg_temp, 'ffmpeg-*.log'))[0]
                 shutil.move(ffmpeglog, os.path.join(log_dir, '%s-%s-ffmpeg.log' % (barcode.get(), str(title).zfill(2))))
         
         #save PREMIS to file       
-        cPickle_dump('premis_list', premis_list)
+        pickleDump('premis_list', premis_list)
         
         #move back to original directory
         os.chdir(bdpl_cwd)
         
-        print '\n\nMOVING IMAGE NORMALIZATION COMPLETED; PROCEED TO NEXT STEP.'
+        print('\n\nMOVING IMAGE NORMALIZATION COMPLETED; PROCEED TO NEXT STEP.')
     
     elif jobType.get() == 'CDDA':
         #make sure media is present
@@ -425,17 +496,17 @@ def TransferContent():
             return
         
         #set up PREMIS list
-        premis_list = cPickle_load('premis_list')
+        premis_list = pickleLoad('premis_list')
 
-        print '\n\nDISK IMAGE CREATION: CDRDAO\n\tSOURCE: %s \n\tDESTINATION: %s' % (sourceDevice.get(), image_dir)
+        print('\n\nDISK IMAGE CREATION: CDRDAO\n\tSOURCE: %s \n\tDESTINATION: %s' % (sourceDevice.get(), image_dir))
         
         #determine appropriate drive ID for cdrdao; save output of command to temp file
         cdr_scan = os.path.join(temp_dir, 'cdr_scan.txt')
         scan_cmd = 'cdrdao scanbus > %s 2>&1' % cdr_scan
-        subprocess.check_output(scan_cmd, shell=True)
+        subprocess.check_output(scan_cmd, shell=True, text=True)
 
         #pull drive ID and cdrdao version from file
-        with open(cdr_scan, 'rb') as f:
+        with open(cdr_scan, 'r') as f:
             info = f.read().splitlines()
         cdrdao_ver = info[0].split(' - ')[0]
         drive_id = info[8].split(':')[0]
@@ -444,47 +515,48 @@ def TransferContent():
         disk_info_log = os.path.join(reports_dir, '%s-cdrdao-diskinfo.txt' % barcode.get())
         cdrdao_cmd = 'cdrdao disk-info --device %s --driver generic-mmc-raw > %s 2>&1' % (drive_id, disk_info_log)
         timestamp = str(datetime.datetime.now())
-        exitcode = subprocess.call(cdrdao_cmd, shell=True)
+        exitcode = subprocess.call(cdrdao_cmd, shell=True, text=True)
         
-        premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, cdrdao_cmd, cdrdao_ver))
+        premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, cdrdao_cmd, 'Extracted information about the CD-R, including medium, TOC type, number of sessions, etc.', cdrdao_ver))
 
         #read log file to determine # of sessions on disk.
-        with open(disk_info_log, 'rb') as f:
+        with open(disk_info_log, 'r') as f:
             for line in f:
                 if 'Sessions             :' in line:
                     sessions = int(line.split(':')[1].strip())
         
-        t2c_ver = subprocess.check_output('toc2cue -V', shell=True).strip()
+        t2c_ver = subprocess.check_output('toc2cue -V', shell=True, text=True).strip()
         
         #for each session, create a bin/toc file
         for x in range(1, (sessions+1)):
             cdr_bin = os.path.join(image_dir, "%s-%s.bin") % (barcode.get(), str(x).zfill(2))
             cdr_toc = os.path.join(image_dir, "%s-%s.toc") % (barcode.get(), str(x).zfill(2))
             
-            print '\n\n\tGenerating session %s of %s: %s\n\n' % (str(x), str(sessions), cdr_bin)
+            print('\n\n\tGenerating session %s of %s: %s\n\n' % (str(x), str(sessions), cdr_bin))
             
             #create separate bin/cue for each session
             cdr_cmd = 'cdrdao read-cd --read-raw --session %s --datafile %s --device %s --driver generic-mmc-raw -v 1 %s' % (str(x), cdr_bin, drive_id, cdr_toc)
             
             timestamp = str(datetime.datetime.now())
             
-            exitcode = subprocess.call(cdr_cmd, shell=True)
+            exitcode = subprocess.call(cdr_cmd, shell=True, text=True)
             
-            premis_list.append(premis_dict(timestamp, 'disk image creation', exitcode, cdr_cmd, cdrdao_ver))
+            premis_list.append(premis_dict(timestamp, 'disk image creation', exitcode, cdr_cmd, 'Extracted a disk image from the physical information carrier.', cdrdao_ver))
                         
             #convert TOC to CUE
             cue = os.path.join(image_dir, "%s-%s.cue") % (barcode.get(), str(sessions).zfill(2))
-            t2c_cmd = 'toc2cue %s %s' % (cdr_toc, cue)
+            cue_log = os.path.join(log_dir, "%s-%s_toc2cue.log") % (barcode.get(), str(sessions).zfill(2))
+            t2c_cmd = 'toc2cue %s %s > %s 2>&1' % (cdr_toc, cue, cue_log)
             timestamp = str(datetime.datetime.now())
-            exitcode2 = subprocess.call(t2c_cmd, shell=True)
+            exitcode2 = subprocess.call(t2c_cmd, shell=True, text=True)
             
-            premis_list.append(premis_dict(timestamp, 'metadata modification', exitcode2, t2c_cmd, t2c_ver))
+            premis_list.append(premis_dict(timestamp, 'metadata modification', exitcode2, t2c_cmd, "Converted the CD's table of contents (TOC) file to the CUE format.", t2c_ver))
             
             #place a copy of the .cue file for the first session in files_dir for the forthcoming WAV; this session will have audio data
             if x == 1:
                 shutil.copy(cue, os.path.join(files_dir, '%s.cue' % barcode.get()))
         
-        print '\n\nDISK IMAGE CREATED'
+        print('\n\nDISK IMAGE CREATED')
         
         #now rip CDDA to WAV using cd-paranoia (Cygwin build; note hyphen)
          
@@ -492,44 +564,45 @@ def TransferContent():
         paranoia_temp = os.path.join(temp_dir, 'paranoia.txt')
         ver_cmd = 'cd-paranoia -V > %s 2>&1' % paranoia_temp
         
-        exitcode = subprocess.call(ver_cmd, shell=True)
-        with open(paranoia_temp, 'rb') as f:
+        exitcode = subprocess.call(ver_cmd, shell=True, text=True)
+        with open(paranoia_temp, 'r') as f:
             paranoia_ver = f.read().splitlines()[0]
         
         paranoia_log = os.path.join(log_dir, '%s-cdparanoia.log' % barcode.get())
         paranoia_out = os.path.join(files_dir, '%s.wav' % barcode.get())
         
-        print '\n\nAUDIO CONTENT NORMALIZATION: CDPARANOIA\n\tSOURCE: %s \n\tDESTINATION: %s\n' % (sourceDevice.get(), paranoia_out)
+        print('\n\nAUDIO CONTENT NORMALIZATION: CDPARANOIA\n\tSOURCE: %s \n\tDESTINATION: %s\n' % (sourceDevice.get(), paranoia_out))
         
         paranoia_cmd = 'cd-paranoia -l %s -w [00:00:00.00]- %s' % (paranoia_log, paranoia_out)
         
         timestamp = str(datetime.datetime.now())
-        exitcode = subprocess.call(paranoia_cmd, shell=True)
+        exitcode = subprocess.call(paranoia_cmd, shell=True, text=True)
         
-        premis_list.append(premis_dict(timestamp, 'disk image creation', exitcode, paranoia_cmd, paranoia_ver))
+        premis_list.append(premis_dict(timestamp, 'normalization', exitcode, paranoia_cmd, 'Transformed object to an institutionally supported preservation format (.WAV).', paranoia_ver))
         
         #save PREMIS to file
-        cPickle_dump('premis_list', premis_list)
+        pickleDump('premis_list', premis_list)
         
-        print 'AUDIO NORMALIZATION COMPLETE; PROCEED TO NEXT STEP'
+        print('AUDIO NORMALIZATION COMPLETE; PROCEED TO NEXT STEP')
         
     else: 
-        print '\n\nError; please indicate the appropriate job type'
+        print('\n\nError; please indicate the appropriate job type')
         return
     
-def premis_dict(timestamp, event_type, event_outcome, event_detail, agent_id):
+def premis_dict(timestamp, event_type, event_outcome, event_detail, event_detail_note, agent_id):
     temp_dict = {}
     temp_dict['eventType'] = event_type
     temp_dict['eventOutcomeDetail'] = event_outcome
     temp_dict['timestamp'] = timestamp
     temp_dict['eventDetailInfo'] = event_detail
+    temp_dict['eventDetailInfo_additional'] = event_detail_note
     temp_dict['linkingAgentIDvalue'] = agent_id
     return temp_dict
     
 def check_fs(fs_type, disktype_output):
     #function to check for specific disk image filetype using disktype output
     
-    with open(disktype_output, 'rb') as f:
+    with open(disktype_output, 'r') as f:
         for line in f:
             if fs_type in line and 'file system' in line:
                 return True
@@ -537,26 +610,77 @@ def check_fs(fs_type, disktype_output):
                 continue
         return False
 
-def carvefiles(carve_ver, carve_cmd, tool, location1, location2):
-    if tool == 'UNHFS':
-        print '\n\nFILE REPLICATION: %s\n\tSOURCE: %s \n\tDESTINATION: %s' % (tool, location2, location1)
+def tsk_recover_func(start, out, imagefile):
+    if start == '':
+        cmd = 'tsk_recover -a {} "C:\\temp\\mmls\\tsk'.format(imagefile) 
     else:
-        print '\n\nFILE REPLICATION: %s\n\tSOURCE: %s \n\tDESTINATION: %s' % (tool, location1, location2)
-    #carve files from disk images (excluding ISO9660 and UDF)
-    timestamp = str(datetime.datetime.now())  
-    pipes = subprocess.Popen(carve_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    std_out, std_err = pipes.communicate()
-        
-    if pipes.returncode == 0 or pipes.returncode == '0':
-        print '\n\nFILE REPLICATION COMPLETED; PROCEED TO NEXT STEP.'
+        cmd = 'tsk_recover -a -o {} {} {}'.format(start, imagefile, out)
+
+    subprocess.call(cmd, shell=True)
+
+def unhfs_func(start, out, imagefile):
+    if start == '':
+        cmd = 'unhfs -o "C:\\temp\\mmls\\unhfs" {}'.format(imagefile)
     else:
-        print '\n\nFILE REPLICATION FAILED:\n\t%s' % std_err
-        return
+        cmd = 'unhfs -partition {} -o {} {}'.format(start, out, imagefile)
     
-    #save preservation event to PREMIS
-    premis_list = cPickle_load('premis_list')
-    premis_list.append(premis_dict(timestamp, 'replication', pipes.returncode, carve_cmd, carve_ver))
-    cPickle_dump('premis_list', premis_list)
+    subprocess.call(cmd, shell=True)
+
+def carvefiles(tool, imagefile, files_dir, part_dict):
+    #set commands based on tool type and if there are partitions (will include partition dictionary if so)
+    
+    if tool == 'unhfs':
+        unhfs_ver = os.path.join(bdpl_vars()['temp_dir'], 'unhfs.txt')
+        if not os.path.exists(unhfs_ver):
+            cmd = 'unhfs > %s 2>&1' % unhfs_ver
+            subprocess.check_output(cmd, shell=True)
+        
+        with open(unhfs_ver, 'r') as f:
+            carve_ver = f.read().splitlines()[0]
+        
+        if part_dict == '':
+            carve_cmd = 'unhfs -resforks APPLEDOUBLE -o "%s" "%s"' % (files_dir, imagefile)
+        else:
+            #create a new destination folder for each partition
+            outfolder = os.path.join(files_dir, 'partition_%s' % part_dict['part_id'].zfill(2))
+            
+            #indicate the partition # (starting from 0) for each
+            carve_cmd = 'unhfs -partition %s -resforks APPLEDOUBLE -o "%s" "%s"' % (part_dict['part_id'], outfolder, imagefile)
+    
+    else:
+        carve_ver = 'tsk_recover: %s ' % subprocess.check_output('tsk_recover -V').strip()
+        
+        if part_dict == '':
+            carve_cmd = 'tsk_recover -a %s %s' % (imagefile, files_dir)
+        
+        else:
+            #create a new destination folder for each partition
+            part_no = str(int(part_dict['part_id']) + 1).zfill(2)
+            outfolder = os.path.join(files_dir, 'partition_%s' % part_no)
+            
+            #indicate the sector offset for each partition
+            carve_cmd = 'tsk_recover -a -o %s %s %s' % (part_dict['start'], imagefile, outfolder)
+        
+    print('\n\n\tTOOL: %s\n\tSOURCE: %s \n\tDESTINATION: %s' % (tool, files_dir, imagefile))
+    
+    if not os.path.exists(outfolder):
+        os.makedirs(outfolder)
+    
+    timestamp = str(datetime.datetime.now())  
+    exitcode = subprocess.call(carve_cmd, shell=True)
+    
+    premis_list = pickleLoad('premis_list')
+    premis_list.append(premis_dict(timestamp, 'replication', exitcode, carve_cmd, "Created a copy of an object that is, bit-wise, identical to the original.", carve_ver))
+    pickleDump('premis_list', premis_list)
+    
+    #if tsk_recover has been run, go through and fix the file MAC times
+    if tool == 'tsk_recover':
+        
+        #generate DFXML with fiwalk
+        produce_dfxml(imagefile)
+        
+        #use DFXML output to get correct MAC times and update files
+        fix_dates(outfolder)
     
 def time_to_int(str_time):
     """ Convert datetime to unix integer value """
@@ -564,12 +688,21 @@ def time_to_int(str_time):
         "%Y-%m-%dT%H:%M:%S").timetuple())
     return dt
     
-def fix_dates(files_dir, dfxml_output):
+def fix_dates(files_dir):
     #adapted from Timothy Walsh's Disk Image Processor: https://github.com/CCA-Public/diskimageprocessor
+    
+    print('\n\nFILE MAC TIME CORRECTION (USING DFXML)')
+   
+    dfxml_output = bdpl_vars()['dfxml_output']
+    
+    #return if fiwalk was unable to read file system
+    with open(dfxml_output, 'r') as f:
+        if "TSK_Error 'Cannot determine file system type'" in f.read():
+            print('\n\nFiwalk was unable to read disk image file system.')
+            return
+    
     timestamp = str(datetime.datetime.now())
-    
-    print '\n\nFILE MAC TIME CORRECTION (USING DFXML)'
-    
+     
     try:
         for (event, obj) in Objects.iterparse(dfxml_output):
             # only work on FileObjects
@@ -620,19 +753,19 @@ def fix_dates(files_dir, dfxml_output):
     except ValueError:
        pass
     
-    premis_list = cPickle_load('premis_list')
+    premis_list = pickleLoad('premis_list')
         
-    premis_list.append(premis_dict(timestamp, 'metadata modification (timestamp correction)', '0', 'https://github.com/CCA-Public/diskimageprocessor/blob/master/diskimageprocessor.py#L446-L489', 'Adapted from Disk Image Processor Version: 1.0.0 (Tim Walsh)'))
+    premis_list.append(premis_dict(timestamp, 'metadata modification', '0', 'https://github.com/CCA-Public/diskimageprocessor/blob/master/diskimageprocessor.py#L446-L489', 'Corrected file timestamps to match information extracted from disk image.', 'Adapted from Disk Image Processor Version: 1.0.0 (Tim Walsh)'))
 
-    cPickle_dump('premis_list', premis_list)
+    pickleDump('premis_list', premis_list)
 
 def run_antivirus(files_dir, log_dir, metadata):
     
-    print '\n\nVIRUS SCAN: MpCmdRun.exe\n\n'
+    print('\n\nVIRUS SCAN: MpCmdRun.exe\n\n')
     
     #return if virus scan already run
     if check_premis('virus check', 'eventType'):
-        print '\n\nVirus scan already completed.'
+        print('\n\nVirus scan already completed.')
         return
     
     virus_log = os.path.join(log_dir, 'viruscheck-log.txt')
@@ -646,17 +779,17 @@ def run_antivirus(files_dir, log_dir, metadata):
     
     
     timestamp = str(datetime.datetime.now())
-    exitcode = subprocess.call(av_command, shell=True)
+    exitcode = subprocess.call(av_command, shell=True, text=True)
     
     #concatenate log file with antivirus stdout
-    subprocess.call('TYPE %s >> %s' % (win_log, virus_log), shell=True)
+    subprocess.call('TYPE %s >> %s' % (win_log, virus_log), shell=True, text=True)
     
     #Get Antivirus signature, definition, etc.; find file with information, convert to ASCII and get most recent 'version' info
     defender_path = "C:\\ProgramData\\Microsoft\\Windows Defender\\Support"
     find_file = fnmatch.filter(os.listdir(defender_path), 'MPDetection-*.log')
     defender_unicode = os.path.join(defender_path, find_file[0])
     defender_ascii = os.path.join(metadata, find_file[0])
-    exitcode = subprocess.call('TYPE "%s" > %s' % (defender_unicode, defender_ascii), shell=True)
+    exitcode = subprocess.call('TYPE "%s" > %s' % (defender_unicode, defender_ascii), shell=True, text=True)
     
     for line in reversed(open(defender_ascii).readlines()):
         if "Version: " in line:
@@ -667,7 +800,7 @@ def run_antivirus(files_dir, log_dir, metadata):
     os.remove(defender_ascii)
     
     #write info to appraisal_dict
-    appraisal_dict = cPickle_load('appraisal_dict')
+    appraisal_dict = pickleLoad('appraisal_dict')
         
     if "found no threats" not in open(virus_log).read():
         appraisal_dict['Virus'] = 'WARNING! Virus or malware found; see %s.' % virus_log
@@ -676,20 +809,20 @@ def run_antivirus(files_dir, log_dir, metadata):
         appraisal_dict['Virus'] = 'No virus or malware identified.'
 
         
-    cPickle_dump('appraisal_dict', appraisal_dict)
+    pickleDump('appraisal_dict', appraisal_dict)
     
     #save preservation to PREMIS
-    premis_list = cPickle_load('premis_list')
-    premis_list.append(premis_dict(timestamp, 'virus check', exitcode, av_command, av_ver))
-    cPickle_dump('premis_list', premis_list)
+    premis_list = pickleLoad('premis_list')
+    premis_list.append(premis_dict(timestamp, 'virus check', exitcode, av_command, 'Scanned files for malicious programs.', av_ver))
+    pickleDump('premis_list', premis_list)
    
 
 def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
-    print '\n\nSENSITIVE DATA SCAN: BULK_EXTRACTOR'
+    print('\n\nSENSITIVE DATA SCAN: BULK_EXTRACTOR')
     
     #return if b_e was run before
-    if check_premis('PII scan', 'eventType'):
-        print '\n\nSensitive data scan already completed.'
+    if check_premis('Sensitive data scan', 'eventType'):
+        print('\n\nSensitive data scan already completed.')
         return
     
     try:
@@ -704,29 +837,29 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
     #create timestamp
     timestamp = str(datetime.datetime.now())        
 
-    exitcode = subprocess.call(bulkext_command, shell=True)
+    exitcode = subprocess.call(bulkext_command, shell=True, text=True)
     
     #get bulk extractor version for premis
     try:
-        be_ver = subprocess.check_output(['bulk_extractor', '-V'], shell=True)
+        be_ver = subprocess.check_output(['bulk_extractor', '-V'], shell=True, text=True).rstrip()
     except subprocess.CalledProcessError as e:
         be_ver = e.output
        
-    premis_list = cPickle_load('premis_list')       
-    premis_list.append(premis_dict(timestamp, 'PII scan', exitcode, bulkext_command, be_ver.rstrip()))
-    cPickle_dump('premis_list', premis_list)
+    premis_list = pickleLoad('premis_list')       
+    premis_list.append(premis_dict(timestamp, 'Sensitive data scan', exitcode, bulkext_command, 'Scanned files for potentially sensitive information, including Social Security and credit card numbers.', be_ver))
+    pickleDump('premis_list', premis_list)
     
     #create a cumulative BE report
     cumulative_report = os.path.join(bulkext_dir, 'cumulative.txt')
     for myfile in ('pii.txt', 'ccn.txt', 'email.txt', 'telephone.txt', 'find.txt'):
         myfile = os.path.join(bulkext_dir, myfile)
-        if os.path.exists(myfile) and os.stat(myfile).st_size > 0L:
-            with open(myfile, 'rb') as filein:
+        if os.path.exists(myfile) and os.stat(myfile).st_size > 0:
+            with open(myfile, 'r') as filein:
                 data = filein.read().splitlines(True)    
-            with open(cumulative_report, 'ab') as outfile:
+            with open(cumulative_report, 'a') as outfile:
                 outfile.write('%s: %s\n' % (os.path.basename(myfile), len(data[5:])))
     if not os.path.exists(cumulative_report):         
-        open(cumulative_report, 'ab').close()
+        open(cumulative_report, 'a').close()
         
     write_html('Personally Identifiable Information (PII)', '%s' % cumulative_report, '\n', html)
 
@@ -734,14 +867,14 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
     for myfile in ('email_domain_histogram.txt', 'find_histogram.txt', 'telephone_histogram.txt'):
         current_file = os.path.join(bulkext_dir, myfile)
         try:    
-            if os.stat(current_file).st_size > 0L:
+            if os.stat(current_file).st_size > 0:
                 shutil.copy(current_file, reports_dir)
         except OSError:
             continue
 
 def run_siegfried(files_dir, reports_dir, siegfried_version):
 
-    print '\n\nFILE FORMAT IDENTIFICATION: SIEGFRIED'
+    print('\n\nFILE FORMAT IDENTIFICATION: SIEGFRIED')
     """Run siegfried on directory"""  
     sf_file = os.path.join(reports_dir, 'siegfried.csv')
     sf_command = 'sf -z -csv -hash md5 "%s" > "%s"' % (files_dir, sf_file)
@@ -752,13 +885,13 @@ def run_siegfried(files_dir, reports_dir, siegfried_version):
     if os.path.exists(sf_file):
         os.remove(sf_file)                                                                 
     
-    exitcode = subprocess.call(sf_command, shell=True)
+    exitcode = subprocess.call(sf_command, shell=True, text=True)
     
-    premis_list = cPickle_load('premis_list')
+    premis_list = pickleLoad('premis_list')
     
-    premis_list.append(premis_dict(timestamp, 'format identification', exitcode, sf_command, siegfried_version))
+    premis_list.append(premis_dict(timestamp, 'format identification', exitcode, sf_command, 'Determined file format and version numbers for content recorded in the PRONOM format registry.', siegfried_version))
     
-    cPickle_dump('premis_list', premis_list)
+    pickleDump('premis_list', premis_list)
 
 def import_csv(cursor, conn, reports_dir):
     """Import csv file into sqlite db"""
@@ -767,11 +900,11 @@ def import_csv(cursor, conn, reports_dir):
     if (sys.version_info > (3, 0)):
         f = open(sf_file, 'r', encoding='utf8')
     else:
-        f = open(sf_file, 'rb')
+        f = open(sf_file, 'r')
     try:
         reader = csv.reader(x.replace('\0', '') for x in f) # replace null bytes with empty strings on read
     except UnicodeDecodeError:
-        f = (x.encode('utf-8').strip() for x in f) # skip non-utf8 encodable characters
+        f = (x.strip() for x in f) # skip non-utf8 encodable characters
         reader = csv.reader(x.replace('\0', '') for x in f) # replace null bytes with empty strings on read
     header = True
     for row in reader:
@@ -849,7 +982,7 @@ def sqlite_to_csv(sql, path, header, cursor):
     if (sys.version_info > (3, 0)):
         report = open(path, 'w', newline='', encoding='utf8')
     else:
-        report = open(path, 'wb')
+        report = open(path, 'w')
     w = csv.writer(report, lineterminator='\n')
     w.writerow(header)
     for row in cursor.execute(sql):
@@ -863,8 +996,8 @@ def write_pronom_links(old_file, new_file):
         in_file = open(old_file, 'r', encoding='utf8')
         out_file = open(new_file, 'w', encoding='utf8')
     else:
-        in_file = open(old_file, 'rb')
-        out_file = open(new_file, 'wb')
+        in_file = open(old_file, 'r')
+        out_file = open(new_file, 'w')
 
     for line in in_file:
         regex = r"fmt\/[0-9]+|x\-fmt\/[0-9]+" #regex to match fmt/# or x-fmt/#
@@ -883,7 +1016,7 @@ def write_html(header, path, file_delimiter, html):
     temp_dir = os.path.join(home_dir, unit.get(), barcode.get(), 'temp')
     
     """Write csv file to html table"""
-    in_file = open(path, 'rb')
+    in_file = open(path, 'r')
     # count lines and then return to start of file
     numline = len(in_file.readlines())
     in_file.seek(0)
@@ -903,10 +1036,10 @@ def write_html(header, path, file_delimiter, html):
     pii_list = []
     if header == 'Personally Identifiable Information (PII)':
         
-        appraisal_dict = cPickle_load('appraisal_dict')
+        appraisal_dict = pickleLoad('appraisal_dict')
         
         #check that there are any PII results
-        if os.stat(path).st_size > 0L:
+        if os.stat(path).st_size > 0:
             html.write('\n<table class="table table-sm table-responsive table-hover">')
             html.write('\n<thead>')
             html.write('\n<tr>')
@@ -916,7 +1049,7 @@ def write_html(header, path, file_delimiter, html):
             html.write('\n</tr>')
             html.write('\n</thead>')
             html.write('\n<tbody>')
-            with open(path, 'rb') as pii_info:
+            with open(path, 'r') as pii_info:
                 for line in pii_info:
                     html.write('\n<tr>')
                     if 'pii.txt' in line:
@@ -955,7 +1088,7 @@ def write_html(header, path, file_delimiter, html):
             html.write('\nNone found.')
             appraisal_dict['PII'] = 'No PII identified'
         
-        cPickle_dump('appraisal_dict', appraisal_dict)
+        pickleDump('appraisal_dict', appraisal_dict)
 
     # if writing duplicates, handle separately
     elif header == 'Duplicates':
@@ -1094,7 +1227,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     if (sys.version_info > (3, 0)):
         year_report = open(year_path, 'w', newline='')
     else:
-        year_report = open(year_path, 'wb')
+        year_report = open(year_path, 'w')
     w = csv.writer(year_report, lineterminator='\n')
     for row in cursor.execute(year_sql):
         w.writerow(row)
@@ -1103,7 +1236,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     if (sys.version_info > (3, 0)):
         year_report_read = open(year_path, 'r', newline='')
     else:
-        year_report_read = open(year_path, 'rb')
+        year_report_read = open(year_path, 'r')
     r = csv.reader(year_report_read)
     years = []
     for row in r:
@@ -1136,7 +1269,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     if (sys.version_info > (3, 0)):
         date_report = open(datemodified_path, 'w', newline='')
     else:
-        date_report = open(datemodified_path, 'wb')
+        date_report = open(datemodified_path, 'w')
     w = csv.writer(date_report, lineterminator='\n')
     for row in cursor.execute(datemodified_sql):
         w.writerow(row)
@@ -1145,7 +1278,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     if (sys.version_info > (3, 0)):
         date_report_read = open(datemodified_path, 'r', newline='')
     else:
-        date_report_read = open(datemodified_path, 'rb')
+        date_report_read = open(datemodified_path, 'r')
     r = csv.reader(date_report_read)
     dates = []
     for row in r:
@@ -1176,7 +1309,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
                 file_info = os.stat(file_path)
                 size_bytes += file_info.st_size
     else:
-        for root, dirs, files in os.walk(unicode(files_dir, 'utf-8')):
+        for root, dirs, files in os.walk(str(files_dir, 'utf-8')):
             for f in files:
                 file_path = os.path.join(root, f)
                 try:
@@ -1274,16 +1407,16 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     html.write('\n<div class="card-body">')
     
     #save information to appraisal_dict
-    appraisal_dict = cPickle_load('appraisal_dict')
+    appraisal_dict = pickleLoad('appraisal_dict')
             
     date_range = '%s to %s' % (begin_date, end_date)
     appraisal_dict.update({'Source': barcode.get(), 'Dates': date_range, 'Extent': size, 'Files': num_files, 'Duplicates': distinct_dupes, 'FormatCount': num_formats, 'Unidentified':unidentified_files})  
     
-    cPickle_dump('appraisal_dict', appraisal_dict)
+    pickleDump('appraisal_dict', appraisal_dict)
     
 def print_premis(premis_path):   
     
-    premis_list = cPickle_load('premis_list')
+    premis_list = pickleLoad('premis_list')
     
     attr_qname = ET.QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation")
 
@@ -1332,6 +1465,11 @@ def print_premis(premis_path):
         eventDetailInfo = ET.SubElement(event, PREMIS + 'eventDetailInformation')
         eventDetail = ET.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
         eventDetail.text = entry['eventDetailInfo']
+        
+        #include additional eventDetailInfo to clarify action
+        eventDetailInfo = ET.SubElement(event, PREMIS + 'eventDetailInformation')
+        eventDetail = ET.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
+        eventDetail.text = entry['eventDetailInfo_additional']
 
         eventOutcomeInfo = ET.SubElement(event, PREMIS + 'eventOutcomeInformation')
         eventOutcome = ET.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcome')
@@ -1372,7 +1510,7 @@ def print_premis(premis_path):
 def checkFiles(some_dir):
     #check to see if it exists
     if not os.path.exists(some_dir):
-        print '\n\nError; folder "%s" does not exist.' % some_dir
+        print('\n\nError; folder "%s" does not exist.' % some_dir)
         return False
     
     #make sure there are files in the 'files' directory
@@ -1380,7 +1518,7 @@ def checkFiles(some_dir):
     for dirpath, dirnames, contents in os.walk(some_dir):
         filecounter += len(contents)
     if filecounter == 0:
-        print '\n\nError; no files located at %s. Check settings and run again; you may need to manually copy or extract files.' % some_dir
+        print('\n\nError; no files located at %s. Check settings and run again; you may need to manually copy or extract files.' % some_dir)
         return False
     else:
         return True
@@ -1396,102 +1534,104 @@ def produce_dfxml(target):
     
     #use fiwalk if we have an image file
     if os.path.isfile(target):
-        print '\n\nDIGITAL FORENSICS XML CREATION: FIWALK'
+        print('\n\nDIGITAL FORENSICS XML CREATION: FIWALK')
         dfxml_ver_cmd = 'fiwalk-0.6.3 -V'
-        dfxml_ver = subprocess.check_output(dfxml_ver_cmd, shell=True).splitlines()[0]
+        dfxml_ver = subprocess.check_output(dfxml_ver_cmd, shell=True, text=True).splitlines()[0]
         
         dfxml_cmd = 'fiwalk-0.6.3 -x %s > %s' % (target, dfxml_output)
-        exitcode = subprocess.call(dfxml_cmd, shell=True)
+        exitcode = subprocess.call(dfxml_cmd, shell=True, text=True)
     
     #use md5deep if we have a folder. NOTE: this will fail on paths that exceed MAX_PATH    
     elif os.path.isdir(target):
-        print '\n\nDIGITAL FORENSICS XML CREATION: MD5DEEP'
-        dfxml_ver = subprocess.check_output('md5deep64 -v', shell=True)
+        print('\n\nDIGITAL FORENSICS XML CREATION: MD5DEEP')
+        dfxml_ver = subprocess.check_output('md5deep64 -v', shell=True, text=True)
         dfxml_ver = 'md5deep64.exe %s' % dfxml_ver
     
         dfxml_cmd = 'md5deep64 -rd %s > %s' % (target, dfxml_output)        
-        exitcode = subprocess.call(dfxml_cmd, shell=True)
+        exitcode = subprocess.call(dfxml_cmd, shell=True, text=True)
     
     else:
-        print '\n\nERROR: %s does not appear to exist...' % target
+        print('\n\nERROR: %s does not appear to exist...' % target)
         return
     
     #save PREMIS
-    premis_list = cPickle_load('premis_list')        
-    premis_list.append(premis_dict(timestamp, 'message digest calculation', exitcode, dfxml_cmd, dfxml_ver))
-    cPickle_dump('premis_list', premis_list)
+    premis_list = pickleLoad('premis_list')        
+    premis_list.append(premis_dict(timestamp, 'message digest calculation', exitcode, dfxml_cmd, 'Extracted information about the strucutre and characteristics of content, including file checksums.', dfxml_ver))
+    pickleDump('premis_list', premis_list)
 
 def optical_drive_letter():
     drive_cmd = 'wmic logicaldisk get caption, drivetype | FINDSTR /C:"5"'
-    drive_ltr = subprocess.check_output(drive_cmd, shell=True).split()[0]
+    drive_ltr = subprocess.check_output(drive_cmd, shell=True, text=True).split()[0]
     return drive_ltr
 
 def disk_image_info(imagefile, reports_dir):
- 
-    print '\n\nDISK IMAGE METADATA EXTRACTION: FSSTAT and ILS'
-    premis_list = cPickle_load('premis_list') 
     
-    #check to see if fsstat was run; if not, do it
-    fsstat_output = os.path.join(reports_dir, 'fsstat.txt')
-    fsstat_ver = 'fsstat: %s' % subprocess.check_output('fsstat -V', shell=True).strip()
-    fsstat_command = 'fsstat %s > %s' % (imagefile, fsstat_output)
+    premis_list = pickleLoad('premis_list') 
     
-    timestamp = str(datetime.datetime.now())
-    exitcode = subprocess.call(fsstat_command, shell=True)
+    print('\n\nDISK IMAGE METADATA EXTRACTION: FSSTAT, ILS, MMLS')
     
-    premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, fsstat_command, fsstat_ver))
-
-    #check to see if ils has been run; if not, do it! 
-    ils_output = os.path.join(reports_dir, 'ils.txt')
-    ils_ver = subprocess.check_output('ils -V', shell=True).strip()
-    ils_command = 'ils -e %s > %s' % (imagefile, ils_output)
-    
-    timestamp = str(datetime.datetime.now())
-    exitcode = subprocess.call(ils_command, shell=True) 
-    
-    premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, ils_command, ils_ver))
-    
-    cPickle_dump('premis_list', premis_list)
-
-def disktype_info(imagefile, reports_dir):
-
+    #run disktype to get information on file systems on disk
     disktype_output = os.path.join(reports_dir, 'disktype.txt')
-    if not os.path.exists(disktype_output):
-        disktype_command = 'disktype %s > %s' % (imagefile, disktype_output)
+    disktype_command = 'disktype %s > %s' % (imagefile, disktype_output)
         
-        timestamp = str(datetime.datetime.now())
-        exitcode = subprocess.call(disktype_command, shell=True)
-        
-        #Save preservation event to PREMIS
-        premis_list = cPickle_load('premis_list')
-        premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, disktype_command, 'disktype v9'))
-        cPickle_dump('premis_list', premis_list)
+    timestamp = str(datetime.datetime.now())
+    exitcode = subprocess.call(disktype_command, shell=True, text=True)
+
+    premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, disktype_command, 'Determined disk image file system information.', 'disktype v9'))
     
-    #now get list of file systems on disk
-    fs_list = []
-    with open(disktype_output, 'rb') as f:
-        for line in f:
-            if 'file system' in line:
-                    fs_list.append(line.lstrip().split(' file system', 1)[0])
-    return fs_list
+    #print out disktype info
+    with open(disktype_output, 'r') as f:
+        print(f.read(), end="")
+    
+    #run fsstat: get range of meta-data values (inode numbers) and content units (blocks or clusters)
+    fsstat_output = os.path.join(reports_dir, 'fsstat.txt')
+    fsstat_ver = 'fsstat: %s' % subprocess.check_output('fsstat -V', shell=True, text=True).strip()
+    fsstat_command = 'fsstat %s > %s 2>&1' % (imagefile, fsstat_output)
+    
+    timestamp = str(datetime.datetime.now())
+    exitcode = subprocess.call(fsstat_command, shell=True, text=True)
+    
+    premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, fsstat_command, 'Determined range of meta-data values (inode numbers) and content units (blocks or clusters)', fsstat_ver))
+
+    #run ils to document inode information
+    ils_output = os.path.join(reports_dir, 'ils.txt')
+    ils_ver = 'ils: %s' % subprocess.check_output('ils -V', shell=True, text=True).strip()
+    ils_command = 'ils -e %s > %s 2>&1' % (imagefile, ils_output)
+    
+    timestamp = str(datetime.datetime.now())
+    exitcode = subprocess.call(ils_command, shell=True, text=True) 
+    
+    premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, ils_command, 'Documented all inodes found on disk image.', ils_ver))
+    
+    #run mmls to document the layout of partitions in a volume system
+    mmls_output = os.path.join(reports_dir, 'mmls.txt')
+    mmls_ver = 'mmls: %s' % subprocess.check_output('mmls -V', shell=True, text=True).strip()
+    mmls_command = 'mmls %s > %s 2>NUL' % (imagefile, mmls_output)
+    
+    timestamp = str(datetime.datetime.now())
+    exitcode = subprocess.call(mmls_command, shell=True, text=True) 
+    
+    premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, mmls_command, 'Determined the layout of partitions in a volume system.', mmls_ver))
+    
+    pickleDump('premis_list', premis_list)
 
 def dir_tree(target):
     
-    print '\n\nDOCUMENTING FOLDER/FILE STRUCTURE: TREE'
+    print('\n\nDOCUMENTING FOLDER/FILE STRUCTURE: TREE')
     
     reports_dir = bdpl_vars()['reports_dir']
     
     #make a directory tree to document original structure
     tree_dest = os.path.join(reports_dir, 'tree.txt')
-    tree_ver = subprocess.check_output('tree --version', shell=True).split(' (')[0]
+    tree_ver = subprocess.check_output('tree --version', shell=True, text=True).split(' (')[0]
     tree_command = 'tree.exe -tDhR "%s" > "%s"' % (target, tree_dest)
     
     timestamp = str(datetime.datetime.now())
-    exitcode = subprocess.call(tree_command, shell=True)
+    exitcode = subprocess.call(tree_command, shell=True, text=True)
 
-    premis_list = cPickle_load('premis_list')
-    premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, tree_command, tree_ver))
-    cPickle_dump('premis_list', premis_list)
+    premis_list = pickleLoad('premis_list')
+    premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, tree_command, 'Documented the organization and structure of content within a directory tree.', tree_ver))
+    pickleDump('premis_list', premis_list)
 
 def format_analysis(files_dir, reports_dir, log_dir, metadata, html):
     #return if Siegfried already run
@@ -1505,7 +1645,7 @@ def format_analysis(files_dir, reports_dir, log_dir, metadata, html):
     
     scan_started = str(datetime.datetime.now()) # get time 
     sfcmd = 'sf -version'
-    siegfried_version = subprocess.check_output(sfcmd, shell=True).replace('\n', ' ')
+    siegfried_version = subprocess.check_output(sfcmd, shell=True, text=True).replace('\n', ' ')
     
     run_siegfried(files_dir, reports_dir, siegfried_version) # run siegfried
 
@@ -1531,8 +1671,10 @@ def analyzeContent():
     temp_dir = bdpl_vars()['temp_dir']
     image_dir = bdpl_vars()['image_dir']
     dfxml_output = bdpl_vars()['dfxml_output']
-
-    print '\n\n-------------------------------------------------------------\n\nSTEP 2: CONTENT ANALYSIS' 
+    
+    newscreen()
+    
+    print('\n\n-------------------------------------------------------------\n\nSTEP 2: CONTENT ANALYSIS') 
     
     #if information not 'verified' then go into 'first run'; exit if anything is wrong
     if not verify_data():
@@ -1540,11 +1682,11 @@ def analyzeContent():
     
     #return if no job type is selected
     if jobType.get() not in ['Disk_image', 'Copy_only', 'DVD', 'CDDA']:
-        print '\n\nError; please indicate the appropriate job type'
+        print('\n\nError; please indicate the appropriate job type')
         return
         
     # copy .css and .jc files to assets directory
-    assets_dir = os.path.join(bdpl_resources, 'assets')
+    assets_dir = os.path.join(bdpl_home, 'resources', 'assets')
     assets_target = os.path.join(reports_dir, 'assets')
     if os.path.exists(assets_target):
         pass
@@ -1556,27 +1698,23 @@ def analyzeContent():
     if (sys.version_info > (3, 0)):
         html = open(temp_html, 'w', encoding='utf8')
     else:
-        html = open(temp_html, 'wb')  
+        html = open(temp_html, 'w')  
     
     #run antivirus scan using Windows MpCmdRun.exe
     run_antivirus(files_dir, log_dir, metadata)
     
     #special steps if working on disk image...
     if jobType.get() == 'Disk_image':
-                
-        #get additional info about the disk image
-        disk_image_info(imagefile, reports_dir)
         
-        #generate DFXML with checksums
-        produce_dfxml(imagefile)
-        
-        #fix dates from files replicated by tsk_recover; first, gete a list of filesystems identified by Disktype
-        fs_list = disktype_info(imagefile, reports_dir)
-        
-        #now see if our list of file systems include either HFS, UDF, or ISO9660 images; these files were replicated using tools other than tsk_recover and don't require date fixes.
-        check_list = ['UDF', 'ISO9660', 'HFS']
-        if not any(fs in ' '.join(fs_list) for fs in check_list):
-            fix_dates(files_dir, dfxml_output)
+        #if we haven't yet created DFXML, do so.  First, load our saved list of file system 
+        if not os.path.exists(dfxml_output):
+            fs_list = pickleLoad('fs_list')
+            
+            #if it's an HFS+ file system, we can use fiwalk on the disk image; otherwise, use md5deep on the file directory
+            if 'hfs+' in (fs.lower() for fs in fs_list):
+                produce_dfxml(imagefile)
+            else:
+                produce_dfxml(files_dir)
     
         #document directory structure
         dir_tree(files_dir)
@@ -1607,11 +1745,7 @@ def analyzeContent():
         produce_dfxml(image_dir)
         
         #document directory structure
-        dir_tree(files_dir)
-    
-    else: 
-        print '\n\nError; please indicate the appropriate job type'
-        return   
+        dir_tree(files_dir) 
     
     #run siegfried to characterize file formats  
     format_analysis(files_dir, reports_dir, log_dir, metadata, html)
@@ -1625,14 +1759,14 @@ def analyzeContent():
         write_pronom_links(temp_html, new_html)
 
     # get format list and add to appraisal dictionary
-    appraisal_dict = cPickle_load('appraisal_dict')
+    appraisal_dict = pickleLoad('appraisal_dict')
     
     fileformats = []
     formatcount = 0
     formatlist = ''
     formatcsv = os.path.join(reports_dir, 'formats.csv')
     try:
-        with open(formatcsv, 'rb') as csvfile:
+        with open(formatcsv, 'r') as csvfile:
             formatreader = csv.reader(csvfile)
             next(formatreader)
             for row in formatreader:
@@ -1649,7 +1783,7 @@ def analyzeContent():
     except IOError:
         appraisal_dict['Formats'] = "ERROR! No formats.csv file to pull formats from."
             
-    cPickle_dump('appraisal_dict', appraisal_dict)
+    pickleDump('appraisal_dict', appraisal_dict)
     
     premis_name = str(barcode.get()) + '-premis.xml'
     premis_path = os.path.join(metadata, premis_name)
@@ -1658,21 +1792,21 @@ def analyzeContent():
     #write info to spreadsheet for collecting unit to review
     writeSpreadsheet()
        
-    print '\n\n----------------------------------------------------------\n\nContent Analysis is complete; results for item %s:\n' % barcode.get()
+    print('\n\n----------------------------------------------------------\n\nContent Analysis is complete; results for item %s:\n' % barcode.get())
     
     du_cmd = 'du64.exe -nobanner "%s" > %s' % (files_dir, os.path.join(temp_dir, 'final_stats.txt'))
     
-    subprocess.call(du_cmd, shell=True)   
+    subprocess.call(du_cmd, shell=True, text=True)   
     
     du_list = ['Files:', 'Directories:', 'Size:', 'Size on disk:']
-    with open(os.path.join(temp_dir, 'final_stats.txt'), 'rb') as f:
+    with open(os.path.join(temp_dir, 'final_stats.txt'), 'r') as f:
         for line, term in zip(f.readlines(), du_list):
             if "Directories:" in term:
-                print term, ' ', str(int(line.split(':')[1]) - 1).rstrip()
+                print(term, ' ', str(int(line.split(':')[1]) - 1).rstrip())
             else: 
-                print term, line.split(':')[1].rstrip()
+                print(term, line.split(':')[1].rstrip())
     
-    print '\n\n'
+    print('\n\n')
     
     #delete temp folder
     shutil.rmtree(temp_dir)
@@ -1703,16 +1837,18 @@ def writePremisToExcel(ws, newrow, eventType, premis_list):
         ws.cell(row=newrow, column=14, value = "Failure")
 
 def writeNote():
+    ship_dir = bdpl_vars()['ship_dir']
+    
     if not verify_data():
         return
     
-    spreadsheet_copy = glob.glob(os.path.join(home_dir, unit.get(), '*.xlsx'))[0]
+    spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))[0]
     
     wb = openpyxl.load_workbook(spreadsheet_copy)    
     
     #need to account for situations where we need to write a note after conclusion of analysis--in these cases, we don't want to create a temp file again...
     if os.path.exists(os.path.join(home_dir, unit.get(), barcode.get(), 'temp')):
-        bc_dict = cPickle_load('bc_dict')
+        bc_dict = pickleLoad('bc_dict')
         bc_dict['label_transcript'] = label_transcription.get(1.0, END).replace('LABEL TRANSCRIPTION:\n\n', '')
     else:
         bc_dict = {}
@@ -1758,16 +1894,16 @@ def writeNote():
             newrow = ws.max_row+1
 
     ws.cell(row=newrow, column=1, value = bc_dict['current_barcode'])
-    ws.cell(row=newrow, column=2, value = bc_dict['current_accession'].encode('utf-8'))
-    ws.cell(row=newrow, column=3, value = bc_dict['current_collection'].encode('utf-8'))
-    ws.cell(row=newrow, column=4, value = bc_dict['current_coll_id'].encode('utf-8'))
-    ws.cell(row=newrow, column=5, value = bc_dict['current_creator'].encode('utf-8'))
-    ws.cell(row=newrow, column=6, value = bc_dict['phys_loc'].encode('utf-8'))
-    ws.cell(row=newrow, column=7, value = bc_dict['current_source'].encode('utf-8'))
-    ws.cell(row=newrow, column=8, value = bc_dict['label_transcript'].encode('utf-8'))
-    ws.cell(row=newrow, column=9, value = bc_dict['appraisal_notes'].encode('utf-8'))
-    ws.cell(row=newrow, column=10, value = bc_dict['restriction_statement'].encode('utf-8'))
-    ws.cell(row=newrow, column=11, value = bc_dict['restriction_end_date'].encode('utf-8'))
+    ws.cell(row=newrow, column=2, value = bc_dict['current_accession'])
+    ws.cell(row=newrow, column=3, value = bc_dict['current_collection'])
+    ws.cell(row=newrow, column=4, value = bc_dict['current_coll_id'])
+    ws.cell(row=newrow, column=5, value = bc_dict['current_creator'])
+    ws.cell(row=newrow, column=6, value = bc_dict['phys_loc'])
+    ws.cell(row=newrow, column=7, value = bc_dict['current_source'])
+    ws.cell(row=newrow, column=8, value = bc_dict['label_transcript'])
+    ws.cell(row=newrow, column=9, value = bc_dict['appraisal_notes'])
+    ws.cell(row=newrow, column=10, value = bc_dict['restriction_statement'])
+    ws.cell(row=newrow, column=11, value = bc_dict['restriction_end_date'])
     
     #write technician's note
     ws.cell(row=newrow, column=15, value = noteField.get(1.0, END))
@@ -1775,14 +1911,16 @@ def writeNote():
     #save and close spreadsheet
     wb.save(spreadsheet_copy)
     
-    print '\n\nInformation saved to Appraisal worksheet.' 
+    print('\n\nInformation saved to Appraisal worksheet.') 
     
 def writeSpreadsheet():
-    premis_list = cPickle_load('premis_list')
-            
-    bc_dict = cPickle_load('bc_dict')
+    ship_dir = bdpl_vars()['ship_dir']
     
-    spreadsheet_copy = glob.glob(os.path.join(home_dir, unit.get(), '*.xlsx'))[0]
+    premis_list = pickleLoad('premis_list')
+            
+    bc_dict = pickleLoad('bc_dict')
+    
+    spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))[0]
     
     wb = openpyxl.load_workbook(spreadsheet_copy)
     ws = wb['Appraisal']
@@ -1796,18 +1934,18 @@ def writeSpreadsheet():
             newrow = ws.max_row+1
 
     ws.cell(row=newrow, column=1, value = bc_dict['current_barcode'])
-    ws.cell(row=newrow, column=2, value = bc_dict['current_accession'].encode('utf-8'))
-    ws.cell(row=newrow, column=3, value = bc_dict['current_collection'].encode('utf-8'))
-    ws.cell(row=newrow, column=4, value = bc_dict['current_coll_id'].encode('utf-8'))
-    ws.cell(row=newrow, column=5, value = bc_dict['current_creator'].encode('utf-8'))
-    ws.cell(row=newrow, column=6, value = str(bc_dict['phys_loc']))
-    ws.cell(row=newrow, column=7, value = bc_dict['current_source'].encode('utf-8'))
+    ws.cell(row=newrow, column=2, value = bc_dict['current_accession'])
+    ws.cell(row=newrow, column=3, value = bc_dict['current_collection'])
+    ws.cell(row=newrow, column=4, value = bc_dict['current_coll_id'])
+    ws.cell(row=newrow, column=5, value = bc_dict['current_creator'])
+    ws.cell(row=newrow, column=6, value = bc_dict['phys_loc'])
+    ws.cell(row=newrow, column=7, value = bc_dict['current_source'])
     #allow BDPL tech to update label transcription and save to spreadsheet
-    #ws.cell(row=newrow, column=8, value = bc_dict['label_transcript'].encode('utf-8'))
+    #ws.cell(row=newrow, column=8, value = bc_dict['label_transcript'])
     ws.cell(row=newrow, column=8, value = label_transcription.get(1.0, END).replace('LABEL TRANSCRIPTION:\n\n', ''))
-    ws.cell(row=newrow, column=9, value = bc_dict['appraisal_notes'].encode('utf-8'))
-    ws.cell(row=newrow, column=10, value = bc_dict['restriction_statement'].encode('utf-8'))
-    ws.cell(row=newrow, column=11, value = bc_dict['restriction_end_date'].encode('utf-8'))
+    ws.cell(row=newrow, column=9, value = bc_dict['appraisal_notes'])
+    ws.cell(row=newrow, column=10, value = bc_dict['restriction_statement'])
+    ws.cell(row=newrow, column=11, value = bc_dict['restriction_end_date'])
     
     #pull in other information about transfer: timestamp, method, outcome
     temp_dict = {}
@@ -1822,7 +1960,7 @@ def writeSpreadsheet():
     ws.cell(row=newrow, column=15, value = noteField.get(1.0, END))
     
     #write appraisal information from various procedures
-    appraisal_dict = cPickle_load('appraisal_dict')
+    appraisal_dict = pickleLoad('appraisal_dict')
     
     ws.cell(row=newrow, column=16, value = appraisal_dict['Extent'])
     ws.cell(row=newrow, column=17, value = appraisal_dict['Files'])
@@ -1903,6 +2041,12 @@ def cleanUp():
     #clear Entry widgets--check if unit will be retained
     barcodeEntry.delete(0, END)
     sourceEntry.delete(0, END)
+    
+    #get rid of X: mapping
+    cmd = 'SUBST X: /D'
+    
+    if os.path.exists('X:\\'):
+        subprocess.check_output(cmd, shell=True)
            
 
 def closeUp():    
@@ -1912,38 +2056,50 @@ def closeUp():
     except (NameError, sqlite3.ProgrammingError) as e:
         pass
     
+    #get rid of X: mapping
+    cmd = 'SUBST X: /D'
+    if os.path.exists('X:\\'):
+        subprocess.check_output(cmd, shell=True)
+    
     #make sure siegfried is up to date
     sfup = 'sf -update'
-    subprocess.call(sfup, shell=True)
+    subprocess.call(sfup, shell=True, text=True)
     
     window.destroy()
 
 def verify_data():
+    ship_dir = bdpl_vars()['ship_dir']
+    
     #check that data has been entered by user
     if spreadsheet.get() == '':
-        spreadsheet_copy = glob.glob(os.path.join(home_dir, unit.get(), '*.xlsx'))
+        spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))
         if spreadsheet_copy:
             spreadsheet.set(spreadsheet_copy[0])
         else:
-            print '\n\nError; please enter the path to the collection spreadsheet'
+            print('\n\nError; please enter the path to the collection spreadsheet')
             return False
 
     if barcode.get() == '':
-        print '\n\nError; please make sure you have entered a barcode.'
+        print('\n\nError; please make sure you have entered a barcode.')
         return False
         
     if unit.get() == '':
         '\n\nError; please make sure you have entered a 3-character unit abbreviation.'
         return False 
+    
+    if shipDateCombo.get() == '':
+        '\n\nError; please make sure you have entered a shipment ID.'
+        return False 
 
     return True
 
 def verify_barcode():
-    unit_home = bdpl_vars()['unit_home']
-    spreadsheet_copy = os.path.join(unit_home, os.path.basename(spreadsheet.get()))
+    ship_dir = bdpl_vars()['ship_dir']
+    
+    spreadsheet_copy = os.path.join(ship_dir, os.path.basename(spreadsheet.get()))
     if not os.path.exists(spreadsheet_copy):
         try:
-            os.makedirs(unit_home)
+            os.makedirs(ship_dir)
         except OSError as exception:
             if exception.errno != errno.EEXIST:
                 raise
@@ -1954,7 +2110,7 @@ def verify_barcode():
     wb = openpyxl.load_workbook(spreadsheet_copy)
 
     #Find the barcode in the inventory sheet; save information to a dictionary so that it can be written to the Appraisal sheet later.
-    bc_dict = cPickle_load('bc_dict')
+    bc_dict = pickleLoad('bc_dict')
     
     #if dictionary is empty, read info from spreadsheet; otherwise, retain dictionary
     if len(bc_dict) == 0:
@@ -1983,7 +2139,7 @@ def verify_barcode():
                 
         #exit if barcode wasn't found
         if len(bc_dict) == 0:
-            print '\n\nError; barcode not found in spreadsheet.\n\nPlease review spreadsheet and correct barcode or add item to spreadsheet at %s.' % spreadsheet_copy
+            print('\n\nError; barcode not found in spreadsheet.\n\nPlease review spreadsheet and correct barcode or add item to spreadsheet at %s.' % spreadsheet_copy)
             return False
         
         #if the barcode was found, write to fields in GUI
@@ -1993,26 +2149,26 @@ def verify_barcode():
                 if bc_dict[val] is None:
                     bc_dict[val] = '-'
                 
-    coll_title.set(bc_dict['current_collection'].encode('utf-8'))
-    coll_creator.set(bc_dict['current_creator'].encode('utf-8'))
-    xfer_source.set(bc_dict['current_source'].encode('utf-8'))
+    coll_title.set(bc_dict['current_collection'])
+    coll_creator.set(bc_dict['current_creator'])
+    xfer_source.set(bc_dict['current_source'])
     
     label_transcription.configure(state='normal')
     label_transcription.delete('1.0', END)
-    label_transcription.insert(INSERT, 'LABEL TRANSCRIPTION:\n\n' + bc_dict['label_transcript'].encode('utf-8'))
+    label_transcription.insert(INSERT, 'LABEL TRANSCRIPTION:\n\n' + bc_dict['label_transcript'])
     #label_transcription.configure(state='disabled')
     
     bdpl_notes.configure(state='normal')
     bdpl_notes.delete('1.0', END)
-    bdpl_notes.insert(INSERT, "TECHNICIAN NOTES:\n\n" + bc_dict['bdpl_notes'].encode('utf-8'))
+    bdpl_notes.insert(INSERT, "TECHNICIAN NOTES:\n\n" + bc_dict['bdpl_notes'])
     bdpl_notes.configure(state='disabled')
     
     appraisal_notes.configure(state='normal')
     appraisal_notes.delete('1.0', END)
-    appraisal_notes.insert(INSERT, "APPRAISAL NOTES:\n\n" + bc_dict['appraisal_notes'].encode('utf-8'))
+    appraisal_notes.insert(INSERT, "APPRAISAL NOTES:\n\n" + bc_dict['appraisal_notes'])
     appraisal_notes.configure(state='disabled')
     
-    cPickle_dump('bc_dict', bc_dict)
+    pickleDump('bc_dict', bc_dict)
             
     #Next, check if barcode has already been written to appraisal sheet
     ws1 = wb['Appraisal']
@@ -2028,62 +2184,68 @@ def verify_barcode():
             noteField.insert(INSERT, notevalue)
             
             if os.path.exists(os.path.join(bdpl_vars()['metadata'], '%s-premis.xml' % barcode.get())):
-                print '\n\nNOTE: this item barcode has completed the entire ingest workflow.  Consult with the digital preservation librarian if you believe additional procedures are needed.'
+                print('\n\nNOTE: this item barcode has completed the entire ingest workflow.  Consult with the digital preservation librarian if you believe additional procedures are needed.')
                 shutil.rmtree(bdpl_vars()['temp_dir'])
                 return False
             else:
-                premis_list = cPickle_load('premis_list')
+                premis_list = pickleLoad('premis_list')
                 if len(premis_list) == 0:
-                    print '\n\nItem barcode has been added to Appraisal worksheet, but no procedures have been completed.'
+                    print('\n\nItem barcode has been added to Appraisal worksheet, but no procedures have been completed.')
                 else:
-                    print '\n\nItem barcode has been added to Appraisal worksheet; the following procedures have been completed:\n\t', '\n\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list))))
+                    print('\n\nItem barcode has been added to Appraisal worksheet; the following procedures have been completed:\n\t', '\n\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list)))))
                 break
         else: 
                 continue
-    print '\n\nRecord loaded successfully; ready for next operation.'
+    print('\n\nRecord loaded successfully; ready for next operation.')
     return True
     
 def check_unfinished():
-
+    ship_dir = bdpl_vars()['ship_dir']
+    
     if unit.get() == '':
-        print '\n\nEnter a unit ID'
+        print('\n\nEnter a unit ID and try again.')
         return
     
+    if shipDateCombo.get() == '':
+        print('\n\nEnter a shipment ID and try again.')
+        return
+        
     for item_barcode in os.listdir(os.path.join(home_dir, unit.get())):
         if os.path.isdir(os.path.join(home_dir, unit.get(), item_barcode)):
             if os.path.exists(bdpl_vars()['temp_dir']):
-                premis_list = cPickle_load('premis_list')
+                premis_list = pickleLoad('premis_list')
                 if len(premis_list) == 0:
-                    print '\nBarcode: %s' % item_barcode
-                    print '\tItem folder structure has been created, but no ingest procedures have been completed.'
+                    print('\nBarcode: %s' % item_barcode)
+                    print('\tItem folder structure has been created, but no ingest procedures have been completed.')
                 else:
-                    print '\nBarcode: %s' % item_barcode
-                    print '\tThe following procedures have been completed:\n\t', '\n\t\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list))))
+                    print('\nBarcode: %s' % item_barcode)
+                    print('\tThe following procedures have been completed:\n\t', '\n\t\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list)))))
 
 def check_progress():
+    ship_dir = bdpl_vars()['ship_dir']
     
     if unit.get() == '':
-        print '\n\nEnter a unit ID'
+        print('\n\nEnter a unit ID')
         return
     
-    spreadsheet_copy = glob.glob(os.path.join(home_dir, unit.get(), '*.xlsx'))[0]
+    spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))[0]
         
     wb = openpyxl.load_workbook(spreadsheet_copy)
     
     try:
         ws = wb['Appraisal']
     except KeyError:
-        print '\n\nCheck %s; make sure "Appraisal" worksheet has not been renamed.  Consult with Digital Preservation Librarian if sheet does not exist.'
+        print('\n\nCheck %s; make sure "Appraisal" worksheet has not been renamed.  Consult with Digital Preservation Librarian if sheet does not exist.')
         return
     
     try:
         ws2 = wb['Inventory']
     except KeyError:
-        print '\n\nCheck %s; make sure "Inventory" worksheet has not been renamed.  Consult with Digital Preservation Librarian if sheet does not exist.'
+        print('\n\nCheck %s; make sure "Inventory" worksheet has not been renamed.  Consult with Digital Preservation Librarian if sheet does not exist.')
         return    
     current_total = (ws2.max_row - 1) - (ws.max_row - 1)
     
-    print '\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total)
+    print('\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total))
     
     list1 = []
     for col in ws['A'][1:]:
@@ -2095,46 +2257,63 @@ def check_progress():
     
     items_not_done = set(list1 + list2)
     
-    print '\n\nThe following barcodes require ingest:\n%s' % '\n'.join(list(items_not_done))
+    print('\n\nThe following barcodes require ingest:\n%s' % '\n'.join(list(items_not_done)))
     
     if len(list(items_not_done)) > 30:
-        print '\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total)
+        print('\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total))
 
 def move_media_images():
     media_image_dir = bdpl_vars()['media_image_dir']
     unit_home = bdpl_vars()['unit_home']
-    media_pics = bdpl_vars()['media_pics']
     
     if unit.get() == '':
         '\n\nError; please make sure you have entered a 3-character unit abbreviation.'
         return 
     
-    
     if len(os.listdir(media_image_dir)) == 0:
-        print '\n\nNo images of media at %s' % media_image_dir
+        print('\n\nNo images of media at %s' % media_image_dir)
         return
     
+    # get a list of barcodes in each shipment
+    shipList = list(filter(lambda f: os.path.isdir(f), glob.glob('%s\\*\\*' % unit_home)))
+
+    #list of files with no parent
     bad_file_list = []
+    
+    #loop through a list of all images in this folder; try to find match in list of barcodes; if not, add to 'bad file list'
     for f in os.listdir(media_image_dir):
-        if os.path.exists(os.path.join(unit_home, f.split('-')[0])):
+        pic = f.split('-')[0]
+        match = [s for s in shipList if pic in s]
+        if len(match) > 0:
+            media_pics = os.path.join(match[0], 'metadata', 'media-image')
             if not os.path.exists(media_pics):
                 os.makedirs(media_pics)
             shutil.move(os.path.join(media_image_dir, f), media_pics)
         else:
             bad_file_list.append(f)
+        
     if len(bad_file_list) > 0:
-        print '\n\nFilenames for the following images do not match current barcodes:\n%s' % '\n'.join(bad_file_list)
-        print '\nPlease correct filenames and try again.'
+        print('\n\nFilenames for the following images do not match current barcodes:\n%s' % '\n'.join(bad_file_list))
+        print('\nPlease correct filenames and try again.')
     else:
-        print '\n\nMedia images successfully copied!'
+        print('\n\nMedia images successfully copied!')
+
+def updateCombobox():
+    
+    if unit.get() == '':
+        comboList = []
+    else:
+        comboList = glob.glob1("%s" % (bdpl_vars()['unit_home']), '*')
+    
+    shipDateCombo['values'] = comboList
+
 
 def main():
     
-    global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteSave, createBtn, analyzeBtn, transferBtn, noteField, label_transcription, bdpl_home, bdpl_resources, home_dir
+    global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, bdpl_home, home_dir, shipDateCombo
     
     home_dir = 'Z:\\'
     bdpl_home = 'C:\\BDPL'
-    bdpl_resources = os.path.join(bdpl_home, 'resources')
     
     window = Tk()
     window.title("Indiana University Library Born-Digital Preservation Lab")
@@ -2182,6 +2361,14 @@ def main():
     unitEntry = Entry(topLeft2, width=5, textvariable=unit)
     unitEntry.pack(in_=topLeft2, side=LEFT, padx=5, pady=5)
 
+    shipLabel = Label(topLeft2, text="Shipment ID: ")
+    shipLabel.pack(in_=topLeft2, side=LEFT, padx=5, pady=5)
+    
+    #User can either select an existng shipment date or add new one
+    shipDateCombo = ttk.Combobox(topLeft2, width=20, postcommand = updateCombobox)
+    shipDateCombo.pack(in_=topLeft2, side=LEFT, padx=5, pady=5)
+    
+
     '''
     
     GUI section for job info
@@ -2201,7 +2388,7 @@ def main():
     
     #job types: these determine which operations run on content
     jobTypeLabel = Label(upperMiddle, text="Job type:")
-    jobTypeLabel.grid(column=0, row=1, padx=10, pady=5)
+    jobTypeLabel.grid(column=0, row=1, padx=5, pady=5)
 
     jobType = StringVar()
     jobType.set(None)
@@ -2407,19 +2594,19 @@ def newscreen():
     fname = "C:/BDPL/scripts/bdpl.txt"
     if os.path.exists(fname):
         with open(fname, 'r') as fin:
-            print fin.read()
+            print(fin.read())
     else:
-        print 'Missing ASCII art header file; download to: %s' % fname
+        print('Missing ASCII art header file; download to: %s' % fname)
         
 def spreadsheet_browse():
     currdir = "Z:\\spreadsheets"
-    selected_file = tkFileDialog.askopenfilename(parent=window, initialdir=currdir, title='Please select your inventory spreadsheet')
+    selected_file = tkinter.filedialog.askopenfilename(parent=window, initialdir=currdir, title='Please select your inventory spreadsheet')
     if len(selected_file) > 0:
         spreadsheet.set(selected_file)
         
 def source_browse():
     currdir = "Z:\\"
-    selected_dir = tkFileDialog.askdirectory(parent=window, initialdir=currdir, title='Please select the source directory')
+    selected_dir = tkinter.filedialog.askdirectory(parent=window, initialdir=currdir, title='Please select the source directory')
     if len(selected_dir) > 0:
         source.set(selected_dir)
         
