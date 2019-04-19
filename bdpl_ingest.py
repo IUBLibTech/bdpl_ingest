@@ -2105,7 +2105,7 @@ def verify_barcode():
                 raise
         #make sure there's not another spreadsheet already in the shipment directory
         if glob.glob(os.path.join(ship_dir, '*.xlsx')):
-            print('\n\n%s already contains a spreadsheet: %s' % (ship_dir, glob.glob(os.path.join(ship_dir, '*.xlsx')[0])
+            print('\n\n%s already contains a spreadsheet: %s' % (ship_dir, glob.glob(os.path.join(ship_dir, '*.xlsx')[0])))
         else:
             shutil.copy(spreadsheet.get(), spreadsheet_copy)
 
