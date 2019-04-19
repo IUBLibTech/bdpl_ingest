@@ -2068,49 +2068,71 @@ def closeUp():
     window.destroy()
 
 def verify_data():
-    ship_dir = bdpl_vars()['ship_dir']
     
-    #check that data has been entered by user
-    if spreadsheet.get() == '':
-        spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))
-        if spreadsheet_copy:
-            spreadsheet.set(spreadsheet_copy[0])
-        else:
-            print('\n\nError; please enter the path to the collection spreadsheet')
-            return False
-
+    if unit.get() == '':
+        print('\n\nError; please make sure you have entered a unit ID abbreviation.')
+        return False 
+    
     if barcode.get() == '':
         print('\n\nError; please make sure you have entered a barcode.')
         return False
-        
-    if unit.get() == '':
-        '\n\nError; please make sure you have entered a 3-character unit abbreviation.'
-        return False 
     
     if shipDateCombo.get() == '':
-        '\n\nError; please make sure you have entered a shipment ID.'
-        return False 
+        print('\n\nError; please make sure you have entered a shipment date.')
+        return False
+    
+    ship_dir = bdpl_vars()['ship_dir']
+    
+    #If all the above are good, then check spreadsheet
+    spreadsheet_check = glob.glob(os.path.join(ship_dir, '*.xlsx'))
+    
+    if spreadsheet.get() == '':
+        if spreadsheet_check:
+            spreadsheet.set(spreadsheet_check[0])
+        else:
+            print('\n\nError; please enter the path to the collection spreadsheet')
+            return False
+    
+    #if spreadsheet added, make sure it matches existing one
+    else:
+        #avoid adding a second spreadsheet to shipment
+        if spreadsheet_check:
+            if os.path.basename(spreadsheet.get()) != os.path.basename(spreadsheet_check[0]):
+                print('\n\n%s already contains a spreadsheet: %s\n\nConsult with digital preservation librarian if you believe previous spreadsheet was added in error.' % (ship_dir, spreadsheet_check[0]))
+                
+                #reset spreadsheet variable to what is already present
+                spreadsheet.set(spreadsheet_check[0])
+        
+        #if there is no spreadsheet, then add it to shipment
+        else:
+            spreadsheet_copy = os.path.join(ship_dir, os.path.basename(spreadsheet.get()))
+
+            try:
+                os.makedirs(ship_dir)
+            except OSError as exception:
+                if exception.errno != errno.EEXIST:
+                    raise   
+                    
+            shutil.copy(spreadsheet.get(), spreadsheet_copy)
+    
+    
+    
+    # if spreadsheet.get() == '':
+        # spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))
+        # if spreadsheet_copy:
+            # spreadsheet.set(spreadsheet_copy[0])
+        # else:
+            # print('\n\nError; please enter the path to the collection spreadsheet')
+            # return False
 
     return True
 
 def verify_barcode():
+        
     ship_dir = bdpl_vars()['ship_dir']
     
-    spreadsheet_copy = os.path.join(ship_dir, os.path.basename(spreadsheet.get()))
-    if not os.path.exists(spreadsheet_copy):
-        try:
-            os.makedirs(ship_dir)
-        except OSError as exception:
-            if exception.errno != errno.EEXIST:
-                raise
-        #make sure there's not another spreadsheet already in the shipment directory
-        if glob.glob(os.path.join(ship_dir, '*.xlsx')):
-            print('\n\n%s already contains a spreadsheet: %s' % (ship_dir, glob.glob(os.path.join(ship_dir, '*.xlsx')[0])))
-        else:
-            shutil.copy(spreadsheet.get(), spreadsheet_copy)
-
     #once we have identified our working spreadsheet (or created it), check data:
-    
+    spreadsheet_copy = os.path.join(ship_dir, os.path.basename(spreadsheet.get()))
     wb = openpyxl.load_workbook(spreadsheet_copy)
 
     #Find the barcode in the inventory sheet; save information to a dictionary so that it can be written to the Appraisal sheet later.
@@ -2271,7 +2293,7 @@ def move_media_images():
     unit_home = bdpl_vars()['unit_home']
     
     if unit.get() == '':
-        '\n\nError; please make sure you have entered a 3-character unit abbreviation.'
+        '\n\nError; please make sure you have entered a unit ID abbreviation.'
         return 
     
     if len(os.listdir(media_image_dir)) == 0:
