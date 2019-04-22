@@ -65,8 +65,27 @@ def first_run():
     if not verify_barcode():
         return
     
-    #now create folders
-    createFolders()
+    #now create folders; first, create the barcode folder and then map to X: drive letter
+    target = bdpl_vars()['target']
+    
+    try:
+        os.makedirs(target)
+    except OSError as exception:
+        if exception.errno != errno.EEXIST:
+            raise
+    
+    #set up mapped folder
+    cmd = 'SUBST X: %s' % target
+    if not os.path.exists('X:\\'):
+        subprocess.check_output(cmd, shell=True)
+        
+    #now create all other folders if they don't exist
+    for folder in ['image_dir', 'files_dir', 'metadata', 'temp_dir', 'reports_dir', 'log_dir', 'media_image_dir']:
+        try:
+            os.makedirs(bdpl_vars()["%s" % folder])
+        except OSError as exception:
+            if exception.errno != errno.EEXIST:
+                raise
     
 
 def bdpl_vars():
@@ -89,63 +108,6 @@ def bdpl_vars():
     vars['media_image_dir'] = os.path.join(home_dir, 'media-images', '%s' % unit.get())
     
     return vars
-
-def createFolders():       
-    #create folders
-    target = bdpl_vars()['target']
-    
-    try:
-        os.makedirs(target)
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
-    
-    #set up mapped folder
-    cmd = 'SUBST X: %s' % target
-    if not os.path.exists('X:\\'):
-        subprocess.check_output(cmd, shell=True)
-
-    try:
-        os.makedirs(bdpl_vars()['image_dir'])
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
-            
-    try:
-        os.makedirs(bdpl_vars()['files_dir'])
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
-    
-    try:
-        os.makedirs(bdpl_vars()['metadata'])
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
-    
-    try:
-        os.makedirs(bdpl_vars()['temp_dir'])
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
-
-    try:
-        os.makedirs(bdpl_vars()['reports_dir'])
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
-            
-    try:
-        os.makedirs(bdpl_vars()['log_dir'])
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
-    
-    try:
-        os.makedirs(bdpl_vars()['media_image_dir'])
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
     
 def pickleLoad(list_name):
     temp_file = os.path.join(bdpl_vars()['temp_dir'], '%s.txt' % list_name)
