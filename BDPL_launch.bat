@@ -1,12 +1,12 @@
 @ECHO OFF
 
-if "%1." =="." GOTO No1
-if "%2." =="."  GOTO No2
-
 TYPE %2\scripts\bdpl.txt
 ECHO.
 ECHO.
 ECHO.
+
+if "%1." =="." GOTO No1
+if "%2." =="."  GOTO No2
 
 setlocal EnableDelayedExpansion
 IF NOT EXIST Z: (
