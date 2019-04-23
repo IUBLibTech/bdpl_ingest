@@ -48,7 +48,7 @@ A barcode folder has the following structure:
  |
  |__ /disk-image/ (if produced)
  |
- |__ /files/ (including normalized versions of content from DVD-Video and CDDA use cases)
+ |__ /files/ (normalized versions of content for DVD-Video and CDDA use cases)
  |
  |__ /metadata/
     |    [barcode]-dfxml.xml
