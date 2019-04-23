@@ -245,6 +245,10 @@ def TransferContent():
     if not verify_data():
         return
     
+    #make sure that media is present
+    if not mediaCheck():
+        return
+
     print('\n\nSTEP 1. TRANSFER CONTENT')
         
     #check to see if content will include disk image; if nothing entered, exit and prompt user to do so        
@@ -255,9 +259,6 @@ def TransferContent():
         secureCopy(teracopy_source, files_dir)
                 
     elif jobType.get() == 'Disk_image':     
-        #make sure that media is present
-        if not mediaCheck():
-            return
             
         #special process for 5.25" floppies: use FC5025
         if sourceDevice.get() == '5.25':
@@ -301,6 +302,9 @@ def TransferContent():
         print('\n\nFILE REPLICATION: ')
         
         #get info on the disk image (fsstat, ils, mmls, and disktype) and generate DFXML
+        disktype_output = os.path.join(reports_dir, 'disktype.txt')
+        mmls_output = os.path.join(reports_dir, 'mmls.txt')
+        
         disk_image_info(imagefile, reports_dir)
         
         #see what kind of filesystems are present
@@ -313,11 +317,7 @@ def TransferContent():
         #save this list for later...
         pickleDump('fs_list', fs_list)
 
-        #now parse output to get information on filesystems and (if present) partitions
-        disktype_output = os.path.join(reports_dir, 'disktype.txt')
-        mmls_output = os.path.join(reports_dir, 'mmls.txt')
-        
-        #we will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
+        #now parse output to get information on filesystems and (if present) partitions.  We will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
         secureCopy_list = ['UDF', 'ISO9660']
         unhfs_list = ['osx', 'hfs', 'Apple', 'mfs']
         
@@ -363,7 +363,6 @@ def TransferContent():
                         partition_info.append(temp)
             
             #go through the list to identify which need to be handled by unhfs and which by tsk_recover
-            #list of potential descriptions to ID when unhfs is required
             
             for part_dict in partition_info:
                 
@@ -376,9 +375,6 @@ def TransferContent():
         print('\n\nFILE REPLICATION COMPLETE; PROCEED TO NEXT STEP')
             
     elif jobType.get() == 'DVD':
-        #make sure media is present
-        if not mediaCheck():
-            return
         
         #create disk image of DVD
         ddrescue_image(temp_dir, log_dir, imagefile, image_dir)
@@ -453,10 +449,7 @@ def TransferContent():
         print('\n\nMOVING IMAGE NORMALIZATION COMPLETED; PROCEED TO NEXT STEP.')
     
     elif jobType.get() == 'CDDA':
-        #make sure media is present
-        if not mediaCheck():
-            return
-        
+
         #set up PREMIS list
         premis_list = pickleLoad('premis_list')
 
