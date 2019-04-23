@@ -44,19 +44,21 @@ bdpl_ingest produces a standardized SIP as well as a report and documentation of
 
 A barcode folder has the following structure:
 ```
- [barcode]/
+ /[barcode]/
  |
- |__ disk-image/ (if produced)
+ |__ /disk-image/ (if produced)
  |
- |__ files/ (including normalized versions of content from DVD-Video and CDDA use cases)
+ |__ /files/ (including normalized versions of content from DVD-Video and CDDA use cases)
  |
- |__ metadata/
+ |__ /metadata/
     |    [barcode]-dfxml.xml
     |    [barcode]-premis.xml
     |
-    |___ logs/
+    |___ /logs/
     |
-    |___ reports/ (including version of Brunnhilde html report)
+    |___ /media-images/ (if produced)
+    |
+    |___ /reports/ (including version of Brunnhilde html report)
 ```
 In addition, highlevel information about each object and the ingest process is saved to a spreadsheet to assist collecting units with the review and appraisal of content before it is saved to secure storage to await final ingest and AIP creation procedures.
 
