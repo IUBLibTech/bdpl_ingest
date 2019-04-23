@@ -244,10 +244,6 @@ def TransferContent():
     #check that barcode exists on spreadsheet; exit if not wrong
     if not verify_data():
         return
-    
-    #make sure that media is present
-    if not mediaCheck():
-        return
 
     print('\n\nSTEP 1. TRANSFER CONTENT')
         
@@ -259,7 +255,11 @@ def TransferContent():
         secureCopy(teracopy_source, files_dir)
                 
     elif jobType.get() == 'Disk_image':     
-            
+
+        #make sure that media is present
+        if not mediaCheck():
+            return
+        
         #special process for 5.25" floppies: use FC5025
         if sourceDevice.get() == '5.25':
             if disk525.get() == 'N/A':
@@ -375,7 +375,10 @@ def TransferContent():
         print('\n\nFILE REPLICATION COMPLETE; PROCEED TO NEXT STEP')
             
     elif jobType.get() == 'DVD':
-        
+        #make sure that media is present
+        if not mediaCheck():
+            return
+            
         #create disk image of DVD
         ddrescue_image(temp_dir, log_dir, imagefile, image_dir)
         
@@ -449,7 +452,10 @@ def TransferContent():
         print('\n\nMOVING IMAGE NORMALIZATION COMPLETED; PROCEED TO NEXT STEP.')
     
     elif jobType.get() == 'CDDA':
-
+        #make sure that media is present
+        if not mediaCheck():
+            return
+            
         #set up PREMIS list
         premis_list = pickleLoad('premis_list')
 
