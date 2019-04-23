@@ -809,8 +809,8 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
     for myfile in ('pii.txt', 'ccn.txt', 'email.txt', 'telephone.txt', 'find.txt'):
         myfile = os.path.join(bulkext_dir, myfile)
         if os.path.exists(myfile) and os.stat(myfile).st_size > 0:
-            with open(myfile, 'r') as filein:
-                data = filein.read().splitlines(True)    
+            with open(myfile, 'rb') as filein:
+                data = filein.read().splitlines()    
             with open(cumulative_report, 'a') as outfile:
                 outfile.write('%s: %s\n' % (os.path.basename(myfile), len(data[5:])))
     if not os.path.exists(cumulative_report):         
