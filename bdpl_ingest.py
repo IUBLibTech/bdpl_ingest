@@ -2168,6 +2168,7 @@ def verify_barcode():
             noteField.delete('1.0', END)
             noteField.insert(INSERT, notevalue)
             
+            #If a premis file exists, we know the whole process was completed
             if glob.glob(os.path.join(metadata, '*premis.xml')):
                 print('\n\nNOTE: this item barcode has completed the entire ingest workflow.  Consult with the digital preservation librarian if you believe additional procedures are needed.')
                 shutil.rmtree(bdpl_vars()['temp_dir'])
