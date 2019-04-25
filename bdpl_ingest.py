@@ -2021,6 +2021,11 @@ def closeUp():
     cmd = 'SUBST X: /D'
     if os.path.exists('X:\\'):
         subprocess.check_output(cmd, shell=True)
+        
+    # #get rid of Z: mapping
+    # cmd = 'SUBST Z: /D'
+    # if os.path.exists('Z:\\'):
+        # subprocess.check_output(cmd, shell=True)
     
     #make sure siegfried is up to date
     sfup = 'sf -update'
@@ -2051,12 +2056,12 @@ def verify_data():
         if spreadsheet_check:
             spreadsheet.set(spreadsheet_check[0])
         else:
-            print('\n\nError; please enter the path to the collection spreadsheet')
+            print('\n\nError; please enter the path to the shipment spreadsheet')
             return False
     
-    #if spreadsheet added, make sure it matches existing one
+    #if spreadsheet identified in GUI, make sure it matches existing one--we don't want 2 of them!
     else:
-        #avoid adding a second spreadsheet to shipment
+        #if we have found a spreadsheet in the shipment dir, make sure it matches the one identified in the GUI.  If so, we'll use the existing one.
         if spreadsheet_check:
             if os.path.basename(spreadsheet.get()) != os.path.basename(spreadsheet_check[0]):
                 print('\n\n%s already contains a spreadsheet: %s\n\nConsult with digital preservation librarian if you believe previous spreadsheet was added in error.' % (ship_dir, spreadsheet_check[0]))
@@ -2064,7 +2069,7 @@ def verify_data():
                 #reset spreadsheet variable to what is already present
                 spreadsheet.set(spreadsheet_check[0])
         
-        #if there is no spreadsheet, then add it to shipment
+        #if there is no spreadsheet in the shipment dir, then add a copy
         else:
             spreadsheet_copy = os.path.join(ship_dir, os.path.basename(spreadsheet.get()))
 
@@ -2075,26 +2080,19 @@ def verify_data():
                     raise   
                     
             shutil.copy(spreadsheet.get(), spreadsheet_copy)
-    
-    
-    
-    # if spreadsheet.get() == '':
-        # spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))
-        # if spreadsheet_copy:
-            # spreadsheet.set(spreadsheet_copy[0])
-        # else:
-            # print('\n\nError; please enter the path to the collection spreadsheet')
-            # return False
+            
+            spreadsheet.set(spreadsheet_copy)
 
     return True
 
 def verify_barcode():
         
     ship_dir = bdpl_vars()['ship_dir']
+    metadata = bdpl_vars()['metadata']
     
     #once we have identified our working spreadsheet (or created it), check data:
-    spreadsheet_copy = os.path.join(ship_dir, os.path.basename(spreadsheet.get()))
-    wb = openpyxl.load_workbook(spreadsheet_copy)
+    
+    wb = openpyxl.load_workbook(spreadsheet.get())
 
     #Find the barcode in the inventory sheet; save information to a dictionary so that it can be written to the Appraisal sheet later.
     bc_dict = pickleLoad('bc_dict')
@@ -2106,6 +2104,7 @@ def verify_barcode():
         next(iterrows)
     
         for row in iterrows:
+            #look to match barcode with a value in the first column; then assign values in a dictionary
             if str(row[0].value) == '%s' % barcode.get():
                 bc_dict['current_barcode'] = str(row[0].value)
                 bc_dict['current_accession'] = row[1].value
@@ -2143,7 +2142,6 @@ def verify_barcode():
     label_transcription.configure(state='normal')
     label_transcription.delete('1.0', END)
     label_transcription.insert(INSERT, 'LABEL TRANSCRIPTION:\n\n' + bc_dict['label_transcript'])
-    #label_transcription.configure(state='disabled')
     
     bdpl_notes.configure(state='normal')
     bdpl_notes.delete('1.0', END)
@@ -2164,13 +2162,13 @@ def verify_barcode():
     
     for row in iterrows:
         if str(row[0].value) == '%s' % barcode.get():
+           
             notevalue = str(row[14].value).rstrip()
-            
             noteField.configure(state='normal')
             noteField.delete('1.0', END)
             noteField.insert(INSERT, notevalue)
             
-            if os.path.exists(os.path.join(bdpl_vars()['metadata'], '%s-premis.xml' % barcode.get())):
+            if glob.glob(os.path.join(metadata, '*premis.xml')):
                 print('\n\nNOTE: this item barcode has completed the entire ingest workflow.  Consult with the digital preservation librarian if you believe additional procedures are needed.')
                 shutil.rmtree(bdpl_vars()['temp_dir'])
                 return False
