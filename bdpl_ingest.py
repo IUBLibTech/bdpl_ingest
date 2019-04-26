@@ -2125,7 +2125,7 @@ def verify_barcode():
                 
         #exit if barcode wasn't found
         if len(bc_dict) == 0:
-            print('\n\nError; barcode not found in spreadsheet.\n\nPlease review spreadsheet and correct barcode or add item to spreadsheet at %s.' % spreadsheet_copy)
+            print('\n\nError; barcode not found in spreadsheet.\n\nPlease review spreadsheet and correct barcode or add item to spreadsheet at %s.' % spreadsheet.get())
             return False
         
         #if the barcode was found, write to fields in GUI
