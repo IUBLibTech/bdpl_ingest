@@ -64,23 +64,9 @@ def first_run():
     #now make sure that barcode is valid and pull 
     if not verify_barcode():
         return
-    
-    #now create folders; first, create the barcode folder and then map to X: drive letter
-    target = bdpl_vars()['target']
-    
-    try:
-        os.makedirs(target)
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
-    
-    #set up mapped folder
-    cmd = 'SUBST X: %s' % target
-    if not os.path.exists('X:\\'):
-        subprocess.check_output(cmd, shell=True)
-        
-    #now create all other folders if they don't exist
-    for folder in ['image_dir', 'files_dir', 'metadata', 'temp_dir', 'reports_dir', 'log_dir', 'media_image_dir']:
+
+    #now create folders if they don't exist
+    for folder in ['destination', 'image_dir', 'files_dir', 'metadata', 'temp_dir', 'reports_dir', 'log_dir', 'media_image_dir']:
         try:
             os.makedirs(bdpl_vars()["%s" % folder])
         except OSError as exception:
@@ -93,8 +79,7 @@ def bdpl_vars():
     vars = {}
     vars['unit_home'] = os.path.join(home_dir, unit.get(), 'ingest' )
     vars['ship_dir'] = os.path.join(vars['unit_home'], '%s' % shipDateCombo.get())
-    vars['target'] = os.path.join(vars['ship_dir'], "%s" % barcode.get())
-    vars['destination'] = "X:\\"
+    vars['destination'] = os.path.join(vars['ship_dir'], "%s" % barcode.get())
     vars['image_dir'] = os.path.join(vars['destination'], "disk-image")
     vars['files_dir'] = os.path.join(vars['destination'], "files")
     vars['metadata'] = os.path.join(vars['destination'], "metadata")
@@ -122,7 +107,7 @@ def pickleLoad(list_name):
     return temp_list
 
 def pickleDump(list_name, list_contents):
-    temp_dir = os.path.join(bdpl_vars()['target'], 'temp')
+    temp_dir = bdpl_vars()['temp_dir']
     temp_file = os.path.join(temp_dir, '%s.txt' % list_name)
      
     if not os.path.exists(temp_dir):
@@ -169,8 +154,6 @@ def secureCopy(file_source, file_destination):
     premis_list = pickleLoad('premis_list')
     premis_list.append(premis_dict(timestamp, 'replication', exitcode, copycmd, 'Created a copy of an object that is, bit-wise, identical to the original.', migrate_ver))
     pickleDump('premis_list', premis_list)
-    
-    print('\n\nFILE REPLICATION COMPLETED; PROCEED TO NEXT STEP.')
 
 def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     
@@ -372,7 +355,7 @@ def TransferContent():
                 else:
                     carvefiles('tsk_recover', imagefile, files_dir, part_dict)
         
-        print('\n\nFILE REPLICATION COMPLETE; PROCEED TO NEXT STEP')
+        print('\n\nFILE REPLICATION COMPLETED; PROCEED TO NEXT STEP')
             
     elif jobType.get() == 'DVD':
         #make sure that media is present
@@ -1803,9 +1786,7 @@ def writeNote():
     if not verify_data():
         return
     
-    spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))[0]
-    
-    wb = openpyxl.load_workbook(spreadsheet_copy)    
+    wb = openpyxl.load_workbook(spreadsheet.get())    
     
     #need to account for situations where we need to write a note after conclusion of analysis--in these cases, we don't want to create a temp file again...
     if os.path.exists(os.path.join(home_dir, unit.get(), barcode.get(), 'temp')):
@@ -1870,7 +1851,7 @@ def writeNote():
     ws.cell(row=newrow, column=15, value = noteField.get(1.0, END))
 
     #save and close spreadsheet
-    wb.save(spreadsheet_copy)
+    wb.save(spreadsheet.get())
     
     print('\n\nInformation saved to Appraisal worksheet.') 
     
@@ -1881,9 +1862,7 @@ def writeSpreadsheet():
             
     bc_dict = pickleLoad('bc_dict')
     
-    spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))[0]
-    
-    wb = openpyxl.load_workbook(spreadsheet_copy)
+    wb = openpyxl.load_workbook(spreadsheet.get())
     ws = wb['Appraisal']
 
     #check to make sure barcode hasn't already been written to worksheet; loop through
@@ -1949,7 +1928,7 @@ def writeSpreadsheet():
         ws.cell(row=newrow, column=28).value = 'CD-DA: transfer "files" to MCO'
     
     #save and close spreadsheet
-    wb.save(spreadsheet_copy)       
+    wb.save(spreadsheet.get())       
         
 def cleanUp():
     
@@ -1995,20 +1974,11 @@ def cleanUp():
     label_transcription.delete('1.0', END)
     label_transcription.insert(INSERT, "LABEL TRANSCRIPTION:\n")
     #label_transcription.configure(state='disabled')
-    
-    
-    noteField.delete('1.0', END)
-    
+      
     #clear Entry widgets--check if unit will be retained
+    noteField.delete('1.0', END)
     barcodeEntry.delete(0, END)
-    sourceEntry.delete(0, END)
-    
-    #get rid of X: mapping
-    cmd = 'SUBST X: /D'
-    
-    if os.path.exists('X:\\'):
-        subprocess.check_output(cmd, shell=True)
-           
+    sourceEntry.delete(0, END)        
 
 def closeUp():    
     
@@ -2017,31 +1987,24 @@ def closeUp():
     except (NameError, sqlite3.ProgrammingError) as e:
         pass
     
-    #get rid of X: mapping
-    cmd = 'SUBST X: /D'
-    if os.path.exists('X:\\'):
-        subprocess.check_output(cmd, shell=True)
-        
-    # #get rid of Z: mapping
-    # cmd = 'SUBST Z: /D'
-    # if os.path.exists('Z:\\'):
-        # subprocess.check_output(cmd, shell=True)
-    
     #make sure siegfried is up to date
     sfup = 'sf -update'
     subprocess.call(sfup, shell=True, text=True)
     
     window.destroy()
 
-def verify_data():
+def verify_data(check=None):
     
     if unit.get() == '':
         print('\n\nError; please make sure you have entered a unit ID abbreviation.')
         return False 
     
     if barcode.get() == '':
-        print('\n\nError; please make sure you have entered a barcode.')
-        return False
+        if check == 'check_progress':
+            pass
+        else:
+            print('\n\nError; please make sure you have entered a barcode.')
+            return False
     
     if shipDateCombo.get() == '':
         print('\n\nError; please make sure you have entered a shipment date.')
@@ -2208,15 +2171,11 @@ def check_unfinished():
                     print('\tThe following procedures have been completed:\n\t', '\n\t\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list)))))
 
 def check_progress():
-    ship_dir = bdpl_vars()['ship_dir']
     
-    if unit.get() == '':
-        print('\n\nEnter a unit ID')
+    if not verify_data('check_progress'):
         return
-    
-    spreadsheet_copy = glob.glob(os.path.join(ship_dir, '*.xlsx'))[0]
         
-    wb = openpyxl.load_workbook(spreadsheet_copy)
+    wb = openpyxl.load_workbook(spreadsheet.get())
     
     try:
         ws = wb['Appraisal']
