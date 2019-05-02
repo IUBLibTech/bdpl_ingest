@@ -403,7 +403,7 @@ def TransferContent():
         os.chdir(ffmpeg_temp)
         
         #get ffmpeg version
-        ffmpeg_ver =  '; '.join(subprocess.check_output('ffmpeg -version', shell=True, text=True).splitlines()[0:2])
+        ffmpeg_ver =  '; '.join(subprocess.check_output('"C:\\Program Files\\ffmpeg\\bin\\ffmpeg" -version', shell=True, text=True).splitlines()[0:2])
         
         print('\n\nMOVING IMAGE FILE NORMALIZATION: FFMPEG')
         
@@ -414,7 +414,7 @@ def TransferContent():
                 timestamp = str(datetime.datetime.now())
                 
                 ffmpegout = os.path.join(files_dir, '%s-%s.mpg' % (barcode.get(), str(title).zfill(2)))
-                ffmpeg_cmd = 'ffmpeg -nostdin -loglevel warning -report -stats -i "concat:%s" -c copy -target ntsc-dvd %s' % ('|'.join(titlelist), ffmpegout)
+                ffmpeg_cmd = '"C:\\Program Files\\ffmpeg\\bin\\ffmpeg" -nostdin -loglevel warning -report -stats -i "concat:%s" -c copy -target ntsc-dvd %s' % ('|'.join(titlelist), ffmpegout)
                 
                 print('\n\n\tGenerating title %s of %s: %s\n\n' % (str(title), str(titlecount), ffmpegout))
                 
