@@ -21,7 +21,7 @@ Each job type is comprised of two main steps: transfer and migration. Significan
     * _ddrescue_ (production of raw images)
     * _cdrdao_ (production of bin and cue files for CDDA use cases)
   * File replication
-    * _tsk_rescue_ (file extraction from disk images with file systems that include ntfs, fat, exfat, hfs+, etc.)
+    * _tsk_recover_ (file extraction from disk images with file systems that include ntfs, fat, exfat, hfs+, etc.)
     * _unhfs_ (file extraction from disk images with file systems that include hfs and hfsx)
     * _TeraCopy_ (replication of files in other use cases, including from optical media with ISO9660 or UDF file systems)
   * Normalization
