@@ -88,7 +88,7 @@ def bdpl_vars():
     vars['log_dir'] = os.path.join(vars['metadata'], 'logs')
     vars['imagefile'] = os.path.join(vars['image_dir'], '%s.dd' % barcode.get())
     vars['dfxml_output'] = os.path.join(vars['metadata'], '%s-dfxml.xml' % barcode.get())
-    vars['bulkext_dir'] = os.path.join(vars['temp_dir'], 'bulk_extractor')
+    vars['bulkext_dir'] = os.path.join(vars['destination'], 'bulk_extractor')
     vars['bulkext_log'] = os.path.join(vars['log_dir'], 'bulkext-log.txt')
     vars['media_image_dir'] = os.path.join(home_dir, 'media-images', '%s' % unit.get())
     
@@ -236,6 +236,8 @@ def TransferContent():
         teracopy_source = source.get().replace('/', '\\')
         
         secureCopy(teracopy_source, files_dir)
+        
+        print('\n\nFILE REPLICATION COMPLETED; PROCEED TO NEXT STEP')
                 
     elif jobType.get() == 'Disk_image':     
 
@@ -394,7 +396,7 @@ def TransferContent():
         titlecount = int(doc.xpath("count(//lsdvd//track)"))
         
         #check current directory; change to a temp directory to store files
-        bdpl_cwd = os.getcwd()
+        bdpl_cwd = 'C:\\BDPL\\scripts'
         
         ffmpeg_temp = os.path.join(temp_dir, 'ffmpeg')
         if not os.path.exists(ffmpeg_temp):
@@ -587,6 +589,8 @@ def carvefiles(tool, imagefile, files_dir, part_dict):
         else:
             #create a new destination folder for each partition
             outfolder = os.path.join(files_dir, 'partition_%s' % part_dict['part_id'].zfill(2))
+            if not os.path.exists(outfolder):
+                os.makedirs(outfolder)
             
             #indicate the partition # (starting from 0) for each
             carve_cmd = 'unhfs -partition %s -resforks APPLEDOUBLE -o "%s" "%s"' % (part_dict['part_id'], outfolder, imagefile)
@@ -601,14 +605,13 @@ def carvefiles(tool, imagefile, files_dir, part_dict):
             #create a new destination folder for each partition
             part_no = str(int(part_dict['part_id']) + 1).zfill(2)
             outfolder = os.path.join(files_dir, 'partition_%s' % part_no)
+            if not os.path.exists(outfolder):
+                os.makedirs(outfolder)
             
             #indicate the sector offset for each partition
             carve_cmd = 'tsk_recover -a -o %s %s %s' % (part_dict['start'], imagefile, outfolder)
         
     print('\n\n\tTOOL: %s\n\tSOURCE: %s \n\tDESTINATION: %s' % (tool, files_dir, imagefile))
-    
-    if not os.path.exists(outfolder):
-        os.makedirs(outfolder)
     
     timestamp = str(datetime.datetime.now())  
     exitcode = subprocess.call(carve_cmd, shell=True)
@@ -750,7 +753,7 @@ def run_antivirus(files_dir, log_dir, metadata):
         appraisal_dict['Virus'] = 'WARNING! Virus or malware found; see %s.' % virus_log
         
     else:
-        appraisal_dict['Virus'] = 'No virus or malware identified.'
+        appraisal_dict['Virus'] = '-'
 
         
     pickleDump('appraisal_dict', appraisal_dict)
@@ -957,7 +960,7 @@ def write_pronom_links(old_file, new_file):
     out_file.close()
 
 def write_html(header, path, file_delimiter, html):
-    temp_dir = os.path.join(home_dir, unit.get(), barcode.get(), 'temp')
+    temp_dir = bdpl_vars()['temp_dir']
     
     """Write csv file to html table"""
     in_file = open(path, 'r')
@@ -1000,12 +1003,12 @@ def write_html(header, path, file_delimiter, html):
                         # write data
                         html.write('\n<td>SSNs, Account Nos., Birth Dates, etc.</td>')
                         html.write('\n<td>' + line.split()[1] + '</td>')
-                        html.write('\n<td>Data not stored locally.</td>')
+                        html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars('bulkext_dir'))
                         pii_list.append('PII (SSNs, account Nos., and/or birth dates)')
                     if 'ccn.txt' in line:
                         html.write('\n<td>Credit Card Nos.</td>')
                         html.write('\n<td>' + line.split()[1] + '</td>')
-                        html.write('\n<td>Data not stored locally.</td>')
+                        html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars('bulkext_dir'))
                         pii_list.append('credit cards nos.')
                     if 'email.txt' in line:
                         html.write('\n<td>Email address domains (may include 3rd party information)</td>')
@@ -1030,7 +1033,7 @@ def write_html(header, path, file_delimiter, html):
     
         else:
             html.write('\nNone found.')
-            appraisal_dict['PII'] = 'No PII identified'
+            appraisal_dict['PII'] = '-'
         
         pickleDump('appraisal_dict', appraisal_dict)
 
@@ -1354,7 +1357,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     appraisal_dict = pickleLoad('appraisal_dict')
             
     date_range = '%s to %s' % (begin_date, end_date)
-    appraisal_dict.update({'Source': barcode.get(), 'Dates': date_range, 'Extent': size, 'Files': num_files, 'Duplicates': distinct_dupes, 'FormatCount': num_formats, 'Unidentified':unidentified_files})  
+    appraisal_dict.update({'Source': barcode.get(), 'Dates': date_range, 'Extent-normal': size, 'Extent-raw': size_bytes, 'Files': num_files, 'Duplicates': distinct_dupes, 'FormatCount': num_formats, 'Unidentified':unidentified_files})  
     
     pickleDump('appraisal_dict', appraisal_dict)
     
@@ -1663,9 +1666,6 @@ def analyzeContent():
         #document directory structure
         dir_tree(files_dir)
         
-        #run bulk_extractor and prepare b_e report for write_html
-        run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir)
-        
     elif jobType.get() == 'Copy_only':
         
         #generate dfxml for preservation copy
@@ -1673,9 +1673,6 @@ def analyzeContent():
         
         #document directory structure
         dir_tree(source.get())
-        
-        #run bulk_extractor and prepare b_e report for write_html
-        run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir)
     
     elif jobType.get() == 'DVD':
         #generate dfxml for preservation copy
@@ -1693,6 +1690,10 @@ def analyzeContent():
     
     #run siegfried to characterize file formats  
     format_analysis(files_dir, reports_dir, log_dir, metadata, html)
+    
+    #run bulk_extractor and prepare b_e report for write_html--only if disk image or copy job
+    if jobType.get() in ['Copy_only', 'Disk_image']:
+        run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir)
     
     # close HTML file
     html.close()
@@ -1849,6 +1850,10 @@ def writeNote():
     
     #write technician's note
     ws.cell(row=newrow, column=15, value = noteField.get(1.0, END))
+    
+    if noteFail.get() == True:
+        ws.cell(row=newrow, column=13, value = str(datetime.datetime.now()))
+        ws.cell(row=newrow, column=14, value = "Failure")
 
     #save and close spreadsheet
     wb.save(spreadsheet.get())
@@ -1902,31 +1907,29 @@ def writeSpreadsheet():
     #write appraisal information from various procedures
     appraisal_dict = pickleLoad('appraisal_dict')
     
-    ws.cell(row=newrow, column=16, value = appraisal_dict['Extent'])
-    ws.cell(row=newrow, column=17, value = appraisal_dict['Files'])
-    ws.cell(row=newrow, column=18, value = appraisal_dict['Duplicates'])
-    ws.cell(row=newrow, column=19, value = appraisal_dict['Unidentified'])
-    ws.cell(row=newrow, column=20, value = appraisal_dict['Formats'])
-    ws.cell(row=newrow, column=21, value = appraisal_dict['Dates'])   
-    ws.cell(row=newrow, column=22, value =  appraisal_dict['Virus'])
+    ws.cell(row=newrow, column=16, value = appraisal_dict['Extent-normal'])
+    ws.cell(row=newrow, column=17, value = appraisal_dict['Extent-raw'])
+    ws.cell(row=newrow, column=18, value = appraisal_dict['Files'])
+    ws.cell(row=newrow, column=19, value = appraisal_dict['Duplicates'])
+    ws.cell(row=newrow, column=20, value = appraisal_dict['Unidentified'])
+    ws.cell(row=newrow, column=21, value = appraisal_dict['Formats'])
+    ws.cell(row=newrow, column=22, value = appraisal_dict['Dates'])   
+    ws.cell(row=newrow, column=23, value =  appraisal_dict['Virus'])
     if 'PII' in appraisal_dict:
-        ws.cell(row=newrow, column=23, value = appraisal_dict['PII'])
+        ws.cell(row=newrow, column=24, value = appraisal_dict['PII'])
         
-    if bc_dict['initial_appraisal'] == "No appraisal needed":
-        ws.cell(row=newrow, column=24, value = "Transfer to SDA")
-
     ws.cell(row=newrow, column=25).value = '=HYPERLINK("{}", "{}")'.format(".\\%s\\metadata\\reports\\report.html" % barcode.get(), "View report")
     
-    ws.cell(row=newrow, column=26).value = '=HYPERLINK("{}", "{}")'.format(".\\%s\\metadata\\reports\\tree.txt" % barcode.get(), "View directory tree")
-    
-    if jobType.get() != 'Copy_only':
-        ws.cell(row=newrow, column=27).value = '=HYPERLINK("{}", "{}")'.format(".\\%s\\metadata\\media-image" % barcode.get(), "Images of media")
+    ws.cell(row=newrow, column=26).value = '=HYPERLINK("{}", "{}")'.format(".\\%s" % barcode.get(), "View transfer folder")
+
+    if bc_dict['initial_appraisal'] == "No appraisal needed":
+        ws.cell(row=newrow, column=27, value = "Transfer to SDA")
     
     if jobType.get() == 'DVD':
         ws.cell(row=newrow, column=28).value = 'DVD: transfer "files" to MCO'
     if jobType.get() == 'CDDA':
         ws.cell(row=newrow, column=28).value = 'CD-DA: transfer "files" to MCO'
-    
+
     #save and close spreadsheet
     wb.save(spreadsheet.get())       
         
@@ -1958,6 +1961,7 @@ def cleanUp():
     xfer_source.set('')
         
     mediaStatus.set(False)
+    noteFail.set(False)
     
     #clear text widgets
     bdpl_notes.configure(state='normal')
@@ -2255,7 +2259,7 @@ def updateCombobox():
 
 def main():
     
-    global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, bdpl_home, home_dir, shipDateCombo
+    global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, bdpl_home, home_dir, shipDateCombo, noteFail
     
     home_dir = 'Z:\\'
     bdpl_home = 'C:\\BDPL'
@@ -2438,10 +2442,15 @@ def main():
     noteFrame.grid_rowconfigure(1, weight=1)
     noteFrame.grid_columnconfigure(1, weight=1)
     
-    noteScroll.grid(row=1, column=2, padx=(0, 10), pady=10, sticky=NS)
+    noteScroll.grid(row=1, column=2, padx=(0, 10), pady=(10, 0), sticky=NS)
     
     noteSave = Button(noteFrame, text="Save", command=writeNote)
-    noteSave.grid(row=1, column=3, padx=10, pady=(2, 10))
+    noteSave.grid(row=1, column=3, padx=10)
+    
+    noteFail = BooleanVar()
+    noteFail.set(False)
+    noteFailChk = Checkbutton(noteFrame, text="Failed transfer?", variable=noteFail)
+    noteFailChk.grid(row=2, column=1, pady=(0, 10))
     
     '''
     GUI section for additional actions/features
