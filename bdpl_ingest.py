@@ -575,6 +575,9 @@ def unhfs_func(start, out, imagefile):
 def carvefiles(tool, imagefile, files_dir, part_dict):
     #set commands based on tool type and if there are partitions (will include partition dictionary if so)
     
+    #set default variable; this will be reset if there are multiple partitions
+    outfolder = files_dir
+    
     if tool == 'unhfs':
         unhfs_ver = os.path.join(bdpl_vars()['temp_dir'], 'unhfs.txt')
         if not os.path.exists(unhfs_ver):
