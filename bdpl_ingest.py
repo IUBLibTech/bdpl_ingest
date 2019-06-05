@@ -1006,12 +1006,12 @@ def write_html(header, path, file_delimiter, html):
                         # write data
                         html.write('\n<td>SSNs, Account Nos., Birth Dates, etc.</td>')
                         html.write('\n<td>' + line.split()[1] + '</td>')
-                        html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars('bulkext_dir'))
+                        html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars()['bulkext_dir'])
                         pii_list.append('PII (SSNs, account Nos., and/or birth dates)')
                     if 'ccn.txt' in line:
                         html.write('\n<td>Credit Card Nos.</td>')
                         html.write('\n<td>' + line.split()[1] + '</td>')
-                        html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars('bulkext_dir'))
+                        html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars()['bulkext_dir'])
                         pii_list.append('credit cards nos.')
                     if 'email.txt' in line:
                         html.write('\n<td>Email address domains (may include 3rd party information)</td>')
