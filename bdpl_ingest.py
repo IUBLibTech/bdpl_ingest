@@ -885,6 +885,7 @@ def generate_reports(cursor, html, reports_dir):
     format_header = ['Format', 'ID', 'Count']
     sqlite_to_csv(sql, path, format_header, cursor)
     write_html('File formats', path, ',', html)
+    os.remove(path)
 
     # sorted format and version list report
     sql = "SELECT format, id, version, COUNT(*) as 'num' FROM siegfried GROUP BY format, version ORDER BY num DESC"
@@ -892,6 +893,7 @@ def generate_reports(cursor, html, reports_dir):
     version_header = ['Format', 'ID', 'Version', 'Count']
     sqlite_to_csv(sql, path, version_header, cursor)
     write_html('File format versions', path, ',', html)
+    os.remove(path)
 
     # sorted mimetype list report
     sql = "SELECT mime, COUNT(*) as 'num' FROM siegfried GROUP BY mime ORDER BY num DESC"
@@ -899,6 +901,7 @@ def generate_reports(cursor, html, reports_dir):
     mime_header = ['MIME type', 'Count']
     sqlite_to_csv(sql, path, mime_header, cursor)
     write_html('MIME types', path, ',', html)
+    os.remove(path)
 
     # dates report
     sql = "SELECT SUBSTR(modified, 1, 4) as 'year', COUNT(*) as 'num' FROM siegfried GROUP BY year ORDER BY num DESC"
@@ -906,25 +909,29 @@ def generate_reports(cursor, html, reports_dir):
     year_header = ['Year Last Modified', 'Count']
     sqlite_to_csv(sql, path, year_header, cursor)
     write_html('Last modified dates by year', path, ',', html)
-
+    os.remove(path)
+    
     # unidentified files report
     sql = "SELECT * FROM siegfried WHERE id='UNKNOWN';"
     path = os.path.join(reports_dir, 'unidentified.csv')
     sqlite_to_csv(sql, path, full_header, cursor)
     write_html('Unidentified', path, ',', html)
-
+    os.remove(path)
+    
     # errors report
     sql = "SELECT * FROM siegfried WHERE errors <> '';"
     path = os.path.join(reports_dir, 'errors.csv')
     sqlite_to_csv(sql, path, full_header, cursor)
     write_html('Errors', path, ',', html)
-
+    os.remove(path)
+    
     # duplicates report
     sql = "SELECT * FROM siegfried t1 WHERE EXISTS (SELECT 1 from siegfried t2 WHERE t2.hash = t1.hash AND t1.filename != t2.filename) AND filesize<>'0' ORDER BY hash;"
     path = os.path.join(reports_dir, 'duplicates.csv')
     sqlite_to_csv(sql, path, full_header, cursor)
     write_html('Duplicates', path, ',', html)
-
+    os.remove(path)
+    
 def sqlite_to_csv(sql, path, header, cursor):
     """Write sql query result to csv"""
     # in python3, specify newline to prevent extra csv lines in windows
