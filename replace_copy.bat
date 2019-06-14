@@ -1,5 +1,7 @@
 @ECHO OFF
 
-SET "_var=%~1"
+REM Copy this file to %USERPROFILE%\AppData\Roaming\Microsoft\Windows\SendTo
 
-ECHO SET /P=%_var:\=/%| CLIP
+SET _var=%~1
+
+<NUL SET /P=%_var:\=/%| CLIP

@@ -1202,8 +1202,8 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
         elif row:
             years.append(row[0])
     if not years:
-        begin_date = "N/A"
-        end_date = "N/A"  
+        begin_date = "-"
+        end_date = "-"  
     else:
         try:
             begin_date = min(years, key=float)
@@ -1215,9 +1215,6 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
         end_date = max(years, key=float)
         
     year_report_read.close()
-
-    # delete temporary uniqueyear file from csv reports dir
-    #os.remove(year_path)
 
     datemodified_sql = "SELECT DISTINCT modified FROM siegfried;" # min and max full modified date
     datemodified_path = os.path.join(reports_dir, 'datemodified.csv')
@@ -1366,7 +1363,11 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     #save information to appraisal_dict
     appraisal_dict = pickleLoad('appraisal_dict')
             
-    date_range = '%s to %s' % (begin_date, end_date)
+    if begin_date == end_date:
+        date_range = begin_date
+    else:
+        date_range = '%s to %s' % (begin_date, end_date)
+    
     appraisal_dict.update({'Source': barcode.get(), 'Dates': date_range, 'Extent-normal': size, 'Extent-raw': size_bytes, 'Files': num_files, 'Duplicates': distinct_dupes, 'FormatCount': num_formats, 'Unidentified':unidentified_files})  
     
     pickleDump('appraisal_dict', appraisal_dict)
@@ -1730,6 +1731,8 @@ def analyzeContent():
             fileformats = [element or 'Unidentified' for element in fileformats] # replace empty elements with 'Unidentified'
             if formatcount > 10:
                 appraisal_dict['Formats'] = "The most prevalent file formats (out of a total %s) are:\n%s" % (formatcount, '\n'.join(fileformats[:10]))
+            elif formatcount = 0:
+                appraisal_dict['Formats'] = "-"
             elif formatcount <= 10:
                 appraisal_dict['Formats'] = "The most prevalent file formats (out of a total %s) are:\n%s" % (formatcount, '\n'.join(fileformats))
             else:

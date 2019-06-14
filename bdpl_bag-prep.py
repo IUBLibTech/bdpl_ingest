@@ -24,21 +24,29 @@ def check_list(list_name, barcode):
         return False
 
 def main():
-    
-    #ID list of identifiers; this could be simplified by just getting a link to the spreadsheet and using it's parent folder.
-    fi_source = 'C:\\temp\\list.txt'
 
-    #Identify where files will be moved
+    #Identify where files will be moved ###### UPDATE TO ARCHIVER location #######
     destination = "C:\\BDPL\\Archiver"
     
     #need to identify the shipment folder; check to make sure it exists
     while True:
         spreadsheet = input('Full path to shipment spreadsheet: ')
-        spreadsheet = spreadsheet.replace('"', '')
+        spreadsheet = spreadsheet.replace('"', '').rstrip()
+
         if os.path.exists(spreadsheet):
             break
         else:
             print('Spreadsheet path not recognized; enclose in quotes and use "/".\n')
+
+    #open workbook
+    wb = openpyxl.load_workbook(spreadsheet)
+    ws = wb['Appraisal']
+    
+    #make sure that the spreadsheet is correctly structured; if there are any errors, exit.
+    if ws['AA1'].value != 'Appraisal results' or ws['G1'].value != 'Source type' or ws['H1'].value != 'Label transcription' or ws['I1'].value != 'Initial appraisal notes':
+        print('\n\nERROR: SPREADSHEET COLUMNS ARE NOT IN CORRECT ORDER')
+        print('Current headings:\n -AA1 (Appraisal results) = %s\n - G1 (Source type) = %s\n - H1 (Label transcription) = %s\n - I1 (Initial appraisal notes) = %s' % (ws['AA1'].value, ws['G1'].value, ws['H1'].value, ws['I1'].value))
+        sys.exit(1)
 
     #get unit name
     while True:
@@ -56,48 +64,48 @@ def main():
     os.chdir(shipment)
     
     #create lists to track work (NOTE: probably a better way to do this...)
-    start_list = os.path.join(shipment, 'started.txt') #to document all the barcodes that we started to package/process; all should be accounted for in the fail/complete lists
+    started_list = os.path.join(shipment, 'started.txt') #to document all the barcodes that we started to package/process; all should be accounted for in the fail/complete lists
     skipped_list = os.path.join(shipment, 'skipped.txt')    #for barcodes/items that will not be sent to SDA
-    fail_list = os.path.join(shipment, 'failed-packaging.txt') #for any failures; will note which stage the failure occurred 
+    failed_list = os.path.join(shipment, 'failed-packaging.txt') #for any failures; will note which stage the failure occurred 
     bagged_list = os.path.join(shipment, 'bagged.txt') #for barcodes that were successfully bagged
     tarred_list = os.path.join(shipment, 'tarred.txt') #for barcodes that were successfully tarred
-    clean_list = os.path.join(shipment, 'cleaned.txt') #for barcode folders that were successfully cleaned
-    complete_list = os.path.join(shipment, 'completed.txt') #for barcodes that reached the end of the process; should include any that were skipped
+    cleaned_list = os.path.join(shipment, 'cleaned.txt') #for barcode folders that were successfully cleaned
+    other_list = os.path.join(shipment, 'other-decision.txt') #for barcode folders have an alternate appraisal decision
+    completed_list = os.path.join(shipment, 'completed.txt') #for barcodes that reached the end of the process; should include any that were skipped
 
-    #open workbook
-    # wb = openpyxl.load_workbook(spreadsheet)
-    # ws = wb['Appraisal']
+    #loop through spreadsheet, skipping header row
+    iterrows = ws.iter_rows()
+    next(iterrows)
+    
+    for row in iterrows:
 
-    with open(fi_source, 'r') as item_list:
-        for barcode in item_list:
+        barcode = str(row[0].value)
+        
+        #description for bag-info.txt currently includes source media, label transcription, and appraisal note.
+        desc = '%s. %s. %s' %(str(row[6].value), str(row[7].value), str(row[8].value))
+        desc.replace('\n', ' ')
+        
+        #skip to next barcode if current one has already finished workflow
+        if check_list(completed_list, barcode):
+            continue
             
-            barcode = barcode.strip()
-            
-            #skip to next barcode if current one has already finished workflow
-            if check_list(complete_list, barcode):
-                continue
-                
-            #document that we've started working on this barcode
-            if not check_list(start_list, barcode):
-                list_write(start_list, barcode)
-            
-            print('\nWorking on item: %s' % barcode)
-            
-            '''
-            IDEALLY, WE SHOULD CHECK APPRAISAL COLUMN IN SPREADSHEET TO SEE IF CONTENT SHOULD GO TO SDA
-            
-            Do something like:
-            
-            if appraisal == 'no':
-                os.remiove(folder)
-            
-            '''
+        #document that we've started working on this barcode
+        if not check_list(started_list, barcode):
+            list_write(started_list, barcode)
+        
+        print('\nWorking on item: %s' % barcode)
+        
+        #if content will not be moved to SDA, just skip folder for now and write to skipped and completed lists
+        if str(row[26].value) == "Delete content":
+            list_write(skipped_list, barcode)
+            print('\n\tContent will not be transferred to SDA.  Continuing with next item.')
+            continue
+        
+        #if content has been determined to be of value, complete prep workflow.
+        elif str(row[26].value) == "Transfer to SDA":
             
             #get full path to barcode folder
             target = os.path.join(shipment, barcode)
-            
-            #parse spreadsheet to get info; CHANGE THIS DEFAULT
-            desc = 'Default description'
             
             '''CLEAN FOLDERS'''
             #remove bulk_extractor folder, if present, as well as reports used solely for appraisal/review
@@ -123,7 +131,7 @@ def main():
                     print('\tBagging complete.')
                 except (RuntimeError, PermissionError, IOError, EnvironmentError) as e:
                     print("\nUnexpected error: ", e)
-                    list_write(fail_list, barcode, 'bagit\t%s' % e)
+                    list_write(failed_list, barcode, 'bagit\t%s' % e)
                     continue
             
             '''CREATE TAR'''
@@ -145,7 +153,7 @@ def main():
                 
                 if available_space <= 0:
                     print('\n\tWARNING! Insufficient space to create tar archive.\n\t\tAvailable space: %s\n\t\tSize needed for archive: %s' % (free, string(dir_size)))
-                    list_write(fail_list, barcode, 'Insufficient space to create tar archive; Need minium of %s bytes' % (free, string(dir_size)))
+                    list_write(failed_list, barcode, 'Insufficient space to create tar archive; Need minium of %s bytes' % (free, string(dir_size)))
                     continue
                 else:
                     print('\tCheck complete.')
@@ -161,20 +169,20 @@ def main():
                     print('\tTar archive created')
                 except (RuntimeError, PermissionError, IOError, EnvironmentError) as e:
                     print("\tUnexpected error: ", e)
-                    list_write(fail_list, barcode, 'tar\t%s' % e)
+                    list_write(failed_list, barcode, 'tar\t%s' % e)
                     continue
         
             '''CLEAN ORIGINAL BARCODE FOLDER'''
             #remove original folder
-            if not check_list(clean_list, barcode):
+            if not check_list(cleaned_list, barcode):
                 print('\n\tRemoving original folder...')
                 try:
                     shutil.rmtree(target)
-                    list_write(clean_list, barcode)
+                    list_write(cleaned_list, barcode)
                     print('\tFolder removed')
                 except PermissionError as e:
                     print("\tUnexpected error: ", e)
-                    list_write(fail_list, barcode, 'clean_original\t%s' % e)
+                    list_write(failed_list, barcode, 'clean_original\t%s' % e)
                     continue
             
             '''MOVE TAR TO ARCHIVER LOCATION'''
@@ -184,23 +192,47 @@ def main():
             
             try:
                 shutil.move(complete_sip, destination)
-                list_write(complete_list, barcode)
+                list_write(completed_list, barcode)
                 print('\tTar file moved.')
             except (RuntimeError, PermissionError, IOError, EnvironmentError) as e:
                 print("\tUnexpected error: ", e)
-                list_write(fail_list, barcode, 'move\t%s' % e)
+                list_write(failed_list, barcode, 'move\t%s' % e)
                 continue
             print('\n\t%s COMPLETED.' % barcode)
+        
+        else:
+            list_write(other_list, barcode, str(row[26].value))
+            print('\n\tAlternate appraisal decision: %s. \n\tConfer with collecting unit as needed.' % str(row[26].value))
             
-    #now that we've finished looping through list, check to see if we have any failures; if so stop and notify user
-    if os.path.isfile(fail_list):
-        with open(fail_list, 'r') as fi:
-            failures = fi.readlines()
-            if len(failures) > 0:
-                print("\n\nATTENTION: %s item(s) failed packaging; see list below:\n\n%s" % (len(failures), '\n'.join(failures)))
-                sys.exit(1)
+    '''CHECK PROCESS FOR MISSING/FAILED ITEMS'''    
+    #get lists from status files
+    list_dict = {'started' : started_list, 'completed' : completed_list, 'skipped' : skipped_list, 'other' : other_list, 'failed' : failed_list}
+    tally_dict = {}
+    for key, value in list_dict.items():
+        if os.path.isfile(value):
+            tally = []
+            with open(value, 'r') as v:
+                for line in v:
+                    tally.append(line.split()[0])
+        else:
+            tally = []
+        tally_dict[key] = tally
+    
+    #determine if any didn't make it through the process to one of the conclusions (skipped, failed, completed, or other)
+    subtotal = tally_dict['completed'] + tally_dict['other'] + tally_dict['failed'] + tally_dict['skipped']
+    missing = list(set(tally_dict['started']) - set(subtotal))
+    
+    print('\n\nSTATS:\n# of barcodes processed:\t\t%s\
+        \n# of barcodes moved to Archiver:\t%s\
+        \n# of barcodes to be deleted:\t\t%s\
+        \n# of barcodes that failed:\t\t%s\
+        \n# of barcodes that require review:\t%s' % (len(tally_dict['started']), len(tally_dict['completed']), len(tally_dict['skipped']), len(tally_dict['failed']), len(tally_dict['other']))) 
+        
+    #make sure all items are accounted for
+    if len(missing) > 0:
+        print("\n# of barcodes not accounted for:\t%s\n\t%s" % (len(missing), '\n\t'.join(missing)))
     else:
-        print('\n\nPackaging for shipment %s is complete.' % os.path.basename(shipment))
+        print('\n\nAll barcodes have been accounted for.')
         
 
 if __name__ == '__main__':
