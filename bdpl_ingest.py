@@ -2250,7 +2250,12 @@ def move_media_images():
             media_pics = os.path.join(match[0], 'metadata', 'media-image')
             if not os.path.exists(media_pics):
                 os.makedirs(media_pics)
-            shutil.move(os.path.join(media_image_dir, f), media_pics)
+            try:
+                shutil.move(os.path.join(media_image_dir, f), media_pics)
+            except shutil.Error as e:
+                print('NOTE: ', e)
+                print('\n\nCheck the media image folder to determine if a file already exists or a filename is being duplicated.')
+                
         else:
             bad_file_list.append(f)
         
