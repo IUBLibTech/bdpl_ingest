@@ -7,6 +7,7 @@ import openpyxl
 import hashlib
 import datetime
 import pickle
+import glob
 
 def list_write(list_name, barcode, message=None):
     with open(list_name, 'a') as current_list:
@@ -46,6 +47,53 @@ def md5(fname):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
+def raw_text(text):
+    """Returns a raw string representation of text"""
+    
+    escape_dict={'\a':r'\a',
+           '\b':r'\b',
+           '\c':r'\c',
+           '\f':r'\f',
+           '\n':r'\n',
+           '\r':r'\r',
+           '\t':r'\t',
+           '\v':r'\v',
+           '\'':r'\'',
+           '\"':r'\"',
+           '\0':r'\0',
+           '\1':r'\1',
+           '\2':r'\2',
+           '\3':r'\3',
+           '\4':r'\4',
+           '\5':r'\5',
+           '\6':r'\6',
+           '\7':r'\7',
+           '\8':r'\8',
+           '\9':r'\9'}
+    
+    new_string=''
+    for char in text:
+        try: 
+            new_string+=escape_dict[char]
+        except KeyError: 
+            new_string+=char
+    return new_string
+
+def separate_content(sep_dest, file, log):
+    #create folder structure, if needed
+    if not os.path.exists(sep_dest):
+        os.makedirs(sep_dest)
+        
+    try:
+        shutil.move(file, sep_dest)
+        with open(log, 'w') as f:
+            f.write('%s\n' % file)
+            
+    except (shutil.Error, OSError, IOError) as e:
+        print('\n\tError separating %s\n\t\t%s' % (file, e))
+        with open(log, 'w') as f:
+            f.write('%s\tERROR: %s' % (file, e))
+
 def main():
     
     '''SET VARIABLES'''
@@ -76,14 +124,25 @@ def main():
             break
         else:
             print('Spreadsheet path not recognized; enclose in quotes and use "/".\n')
-
+    
+    while True:
+        separations = input('\nFull path to separations file: ')
+        separations = separations.replace('"', '').rstrip()
+        
+        if separations == '':
+            break
+        elif not os.path.isfile(separations):
+            print('Separations file does not appear to exist.')
+        else:
+            break
+     
     #open shipment workbook
     wb = openpyxl.load_workbook(spreadsheet)
     ws = wb['Appraisal']
 
     #get shipment direcetory from spreadsheet
     shipment = os.path.dirname(spreadsheet)
-    shipmentID = os.path.basename(os.path.dirname(shipment))    
+    shipmentID = os.path.basename(shipment)
 
     #set shipment directory as current working directory
     os.chdir(shipment) 
@@ -100,6 +159,7 @@ def main():
     other_list = os.path.join(report_dir, 'other-decision.txt') #for barcode folders have an alternate appraisal decision
     moved_list = os.path.join(report_dir, 'moved.txt') #for barcodes that reached the end of the process; should include any that were deaccessioned
     metadata_list = os.path.join(report_dir, 'metadata.txt') #for barcodes that have metadata written to spreadsheet
+    separations_list = os.path.join(report_dir, 'separations.txt') #for barcodes that have undergone separations
     unaccounted_list = os.path.join(report_dir, 'unaccounted.txt') #for barcodes that are in directory, but not in spreadsheet; need to check for data entry errors
     duration_doc = os.path.join(report_dir, 'duration.txt')
     missing_doc = os.path.join(report_dir, 'missing.txt')
@@ -142,7 +202,7 @@ def main():
         duration_stats = {'duration' : duration, 'earliest' : earliest_date, 'latest' : latest_date}
     
         #make our report directory
-        if not os.path.isdir(report_dir):
+        if not os.path.exists(report_dir):
             os.mkdir(report_dir)
         
         #write duration and 'missing' stats to file
@@ -154,7 +214,7 @@ def main():
         #If we have unaccounted barcodes; save list to file and move the dirs themselves to an 'unaccounted' folder
         if len(missing_from_spreadsheet) > 0:
             
-            if not os.path.isdir('unaccounted'):
+            if not os.path.exists('unaccounted'):
                 os.mkdir('unaccounted')   
                 
             with open(unaccounted_list, 'w') as f:
@@ -194,7 +254,7 @@ def main():
         if str(row[26].value) == "Delete content":
             if not check_list(deaccession_list, barcode):
                 
-                if not os.path.isdir('deaccessioned'):
+                if not os.path.exists('deaccessioned'):
                     os.mkdir('deaccessioned')
                 
                 shutil.move(barcode, 'deaccessioned')
@@ -204,6 +264,9 @@ def main():
                 list_write(deaccession_list, barcode)
                 
                 continue
+            
+            else:
+                print('\t%s has been moved to the "deaccession" folder.')
         
         #if content has been determined to be of value, complete prep workflow.
         elif str(row[26].value) == "Transfer to SDA":
@@ -218,35 +281,90 @@ def main():
                 list_write(failed_list, barcode, 'check_folder\tFOLDER DOES NOT EXIST')
                 continue
             
-            '''CLEAN FOLDERS'''
-            #remove bulk_extractor folder, if present, as well as reports used solely for appraisal/review
-            print('\tRemoving appraisal and review files...')
-            
-            for dir in ['bulk_extractor', 'temp']:
-                remove_dir = os.path.join(target, dir)
-                if os.path.exists(remove_dir):
-                    shutil.rmtree(remove_dir)
-         
-            for f in ["duplicates.csv", "errors.csv", "formats.csv", "formatVersions.csv", "mimetypes.csv", "unidentified.csv", "uniqueyears.csv", "years.csv",]:
-                report = os.path.join(target, 'metadata', 'reports', f)
-                if os.path.exists(report):
-                    os.remove(report)
+            '''REMOVE SEPARATED CONTENT AND TEMP FILES/FOLDERS'''
+            if not check_list(separations_list, barcode):
+                print('\n\tSeparating unnecessary files...')
+                
+                #remove bulk_extractor folder, if present, as well as reports used solely for appraisal/review
+                for dir in ['bulk_extractor', 'temp']:
+                    remove_dir = os.path.join(target, dir)
+                    if os.path.exists(remove_dir):
+                        shutil.rmtree(remove_dir)
+             
+                for f in ["duplicates.csv", "errors.csv", "formats.csv", "formatVersions.csv", "mimetypes.csv", "unidentified.csv", "uniqueyears.csv", "years.csv",]:
+                    report = os.path.join(target, 'metadata', 'reports', f)
+                    if os.path.exists(report):
+                        os.remove(report)
+                        
+                #remove any files that need to be separated
+                if os.path.isfile(separations):
+                    #set up a log file
+                    separations_log = os.path.join(target, 'metadata', 'logs', 'separations.txt')
+                    
+                    #get a list of relevant lines from the separations file, splitting at the barcode (to avoid any differences with absolute paths)
+                    to_be_separated = []
+                    with open(separations, 'r') as f:
+                        sep_list = f.read().splitlines()
+                    for file in sep_list:
+                        if barcode in file:
+                            name = raw_text(file.replace('"', '').rstrip())
+                            to_be_separated.append(name.split('%s\\' % shipmentID, 1)[1])
+                    
+                    #if we've found any files, create a barcode folder in 'deaccessions' direcetory and then loop through list
+                    if len(to_be_separated) > 0:
+                    
+                        separations_dir = os.path.join('deaccessioned', barcode)
+                        if not os.path.exists(separations_dir):
+                            os.mkdir(separations_dir)
+                        
+                        for item in to_be_separated:
+                            #if a wildcard is used, we will use glob to build a list of all files/folders matching pattern
+                            if '*' in item:
+                                wildcard_list = []
+                                
+                                #recursive option
+                                if '\\**' in item:
+                                    wildcard_list = glob.glob(item, recursive=True)
+                            
+                                #wildcard at one level
+                                elif '\\*' in item:
+                                    wildcard_list = glob.glob(item)
+                                
+                                #now loop through this list of files/folders identified by glob
+                                for wc in wildcard_list:
+                                    sep_dest = os.path.join(separations_dir, os.path.dirname(wc))
+                                    separate_content(sep_dest, wc, separations_log)
+                            
+                            else:
+                                sep_dest = os.path.join(separations_dir, os.path.dirname(item))
+                                separate_content(sep_dest, item, separations_log)                        
+                
+                        #check to see if any errors reported
+                        if os.path.exists(separations_log):
+                            with open(separations_log, 'r') as f:
+                                if 'ERROR:' in f.readlines():
+                                    print('\tFailed to separate materials.')
+                                    list_write(failed_list, barcode)
+                                    continue
+                print('\tSeparations completed.')
+                list_write(separations_list, barcode)
             
             '''BAG FOLDER'''
             #make sure we haven't already bagged folder
             if not check_list(bagged_list, barcode):
             
+                print('\n\tCreating bag for barcode folder...')
+                
                 #description for bag-info.txt currently includes source media, label transcription, and appraisal note.
                 desc = '%s. %s. %s' %(str(row[6].value), str(row[7].value), str(row[8].value))
                 desc.replace('\n', ' ')    
         
                 try:
-                    print('\n\tBagging folder...')
                     bagit.make_bag(target, {"Source-Organization" : unit, "External-Description" : desc, "External-Identifier" : barcode}, checksums=["md5"])
                     list_write(bagged_list, barcode)
                     print('\tBagging complete.')
                 except (RuntimeError, PermissionError, IOError, EnvironmentError) as e:
-                    print("\nUnexpected error: ", e)
+                    print("\tUnexpected error: ", e)
                     list_write(failed_list, barcode, 'bagit\t%s' % e)
                     continue
             
@@ -315,7 +433,6 @@ def main():
                     print("\tUnexpected error: ", e)
                     list_write(failed_list, barcode, 'move\t%s' % e)
                     continue
-                print('\n\t%s MOVED.' % barcode)
                         
             '''WRITE STATS TO MASTER SPREADSHEET'''
             if not check_list(metadata_list, barcode):
@@ -388,14 +505,18 @@ def main():
         
         else:
             #if other appraisal decisions are indicated, note barcode in a list and move folder.
-            list_write(other_list, barcode, str(row[26].value))
+            if not check_list(other_list, barcode):
+                list_write(other_list, barcode, str(row[26].value))
+                
+                if not os.path.exists('review'):
+                    os.mkdir('review')
+                
+                shutil.move(barcode, 'review')
+                
+                print('\n\tAlternate appraisal decision: %s. \n\tConfer with collecting unit as needed.' % str(row[26].value))
             
-            if not os.path.isdir('review'):
-                os.mkdir('review')
-            
-            shutil.move(barcode, 'review')
-            
-            print('\n\tAlternate appraisal decision: %s. \n\tConfer with collecting unit as needed.' % str(row[26].value))
+            else:
+                print('\n%s has been moved to the "Review" folder.' % barcode)
             
     '''CHECK PROCESS FOR MISSING/FAILED ITEMS'''    
     #get lists from status files: how many barcodes are in each list
@@ -441,7 +562,7 @@ def main():
         with open(duration_doc, 'rb') as file:
             duration_stats = pickle.load(file)
         
-        #check to make sure shipment hasn't already been written to worksheet
+        #check to make sure shipment hasn't already been written to worksheet; if so, we will update that information.
         iterrows = cumulative_ws.iter_rows()
         next(iterrows)
         
