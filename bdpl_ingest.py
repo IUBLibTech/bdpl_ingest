@@ -157,7 +157,28 @@ def secureCopy(file_source, file_destination):
 
 def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     
-    print('\n\nDISK IMAGE CREATION: DDRESCUE\n\tSOURCE: %s \n\tDESTINATION: %s\n\n' % (sourceDevice.get(), imagefile))
+    if sourceDevice.get() == 'Zip':
+        ps_cmd = "Get-Partition | % {New-Object PSObject -Property @{'DiskModel'=(Get-Disk $_.DiskNumber).Model; 'DriveLetter'=$_.DriveLetter}}"
+        cmd = 'powershell.exe "%s"' % ps_cmd
+        out = subprocess.check_output(cmd, shell=True, text=True)
+        for line in out.splitlines():
+            if 'ZIP 100' in line:
+                  drive_ltr = line.split()[2]
+
+        cmd = 'cat /proc/partitions'
+        out2 = subprocess.check_output(cmd, shell=True, text=True)
+        for line in out2.splitlines():
+            if len(line.split()) == 5 and drive_ltr in line.split()[4]:
+                dd_target = '/dev/%s' % line.split()[3]
+    
+    elif sourceDevice.get() == 'Other':
+        print('ERROR! Need to figure out what drive/device we would use...')
+        return
+        
+    else:
+        dd_target = sourceDevice.get()
+        
+    print('\n\nDISK IMAGE CREATION: DDRESCUE\n\tSOURCE: %s \n\tDESTINATION: %s\n\n' % (dd_target, imagefile))
     
     #set up premis list
     premis_list = pickleLoad('premis_list')
@@ -177,7 +198,7 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     migrate_ver = subprocess.check_output('ddrescue -V', shell=True, text=True).split('\n', 1)[0]  
     timestamp1 = str(datetime.datetime.now())
     
-    copycmd1 = 'ddrescue -n --log-events=%s --log-rates=%s --log-reads=%s %s %s %s' % (ddrescue_events1, ddrescue_rates1, ddrescue_reads1, sourceDevice.get(), imagefile, mapfile)
+    copycmd1 = 'ddrescue -n --log-events=%s --log-rates=%s --log-reads=%s %s %s %s' % (ddrescue_events1, ddrescue_rates1, ddrescue_reads1, dd_target, imagefile, mapfile)
     
     #run commands via subprocess; per ddrescue instructions, we need to run it twice    
 
@@ -188,7 +209,7 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     #new timestamp for second pass (recommended by ddrescue developers)
     timestamp2 = str(datetime.datetime.now())
     
-    copycmd2 = 'ddrescue -d -r2 --log-events=%s --log-rates=%s --log-reads=%s %s %s %s' % (ddrescue_events2, ddrescue_rates2, ddrescue_reads2, sourceDevice.get(), imagefile, mapfile)
+    copycmd2 = 'ddrescue -d -r2 --log-events=%s --log-rates=%s --log-reads=%s %s %s %s' % (ddrescue_events2, ddrescue_rates2, ddrescue_reads2, dd_target, imagefile, mapfile)
     
     exitcode2 = subprocess.call(copycmd2, shell=True, text=True)
     
@@ -1731,7 +1752,7 @@ def analyzeContent():
             fileformats = [element or 'Unidentified' for element in fileformats] # replace empty elements with 'Unidentified'
             if formatcount > 10:
                 appraisal_dict['Formats'] = "The most prevalent file formats (out of a total %s) are:\n%s" % (formatcount, '\n'.join(fileformats[:10]))
-            elif formatcount = 0:
+            elif formatcount == 0:
                 appraisal_dict['Formats'] = "-"
             elif formatcount <= 10:
                 appraisal_dict['Formats'] = "The most prevalent file formats (out of a total %s) are:\n%s" % (formatcount, '\n'.join(fileformats))
@@ -2402,22 +2423,23 @@ def main():
     
     disk525 = StringVar()
     disk525.set('N/A')
-    
+            
     sourceDeviceLabel = Label(lowerMiddle, text='Media source:')
     sourceDeviceLabel.grid(column=0, row=0)
         
     source1 = Radiobutton(lowerMiddle, text='CD/DVD', value='/dev/sr0', variable=sourceDevice)
     source2 = Radiobutton(lowerMiddle, text='3.5" fd', value='/dev/fd0', variable=sourceDevice)
     source3 = Radiobutton(lowerMiddle, text='5.25" fd', value='5.25', variable=sourceDevice)
-    disk_menu = OptionMenu(lowerMiddle, disk525, *disk_type_options)
-    #NOTE: should probably use /dev/sdb to copy whole drive; this would also require using MMLS to find sector offset.  Test with Zip disk and USB drive...
-    source4 = Radiobutton(lowerMiddle, text='Other (USB, Zip, etc.)', value='/dev/sdb1', variable=sourceDevice)
+    disk_menu = OptionMenu(lowerMiddle, disk525, *disk_type_options)    
+    source4 = Radiobutton(lowerMiddle, text='Zip', value='Zip', variable=sourceDevice)
+    source5 = Radiobutton(lowerMiddle, text='Other', value='other', variable=sourceDevice)
 
     source1.grid(column=1, row=0, padx=10, pady=5)
     source2.grid(column=2, row=0, padx=10, pady=5)
     source3.grid(column=3, row=0, padx=10, pady=5)
     disk_menu.grid(column=4, row=0, padx=10, pady=5)
     source4.grid(column=5, row=0, padx=10, pady=5)
+    source5.grid(column=6, row=0, padx=10, pady=5)
 
     #buttons: kick off various functions    
     newBtn = Button(lowerMiddle, text="New transfer", command=cleanUp)

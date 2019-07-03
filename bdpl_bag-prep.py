@@ -453,8 +453,8 @@ def main():
                         os.remove(report)
                         
                 assets = os.path.join(target, 'metadata', 'reports', 'assets')
-                    if os.path.exists(assets):
-                        shutil.rmtree(assets)
+                if os.path.exists(assets):
+                    shutil.rmtree(assets)
                         
                 #remove any files that need to be separated
                 if os.path.isfile(separations_manifest):
