@@ -11,7 +11,6 @@ import glob
 import csv
 from lxml import etree
 import uuid
-import ast
 
 def list_write(list_name, barcode, message=None):
     with open(list_name, 'a') as current_list:
