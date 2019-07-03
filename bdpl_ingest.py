@@ -1014,22 +1014,22 @@ def write_html(header, path, file_delimiter, html):
                         html.write('\n<td>SSNs, Account Nos., Birth Dates, etc.</td>')
                         html.write('\n<td>' + line.split()[1] + '</td>')
                         html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars()['bulkext_dir'])
-                        pii_list.append('PII (SSNs, account Nos., and/or birth dates)')
+                        pii_list.append('ACCOUNT NOs')
                     if 'ccn.txt' in line:
                         html.write('\n<td>Credit Card Nos.</td>')
                         html.write('\n<td>' + line.split()[1] + '</td>')
                         html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars()['bulkext_dir'])
-                        pii_list.append('credit cards nos.')
+                        pii_list.append('CCNs')
                     if 'email.txt' in line:
                         html.write('\n<td>Email address domains (may include 3rd party information)</td>')
                         html.write('\n<td>' + line.split()[1] + '</td>')
                         html.write('\n<td>See: <a href="./email_domain_histogram.txt">Email domain histogram</a></td>')
-                        pii_list.append('email addresses')
+                        pii_list.append('EMAIL')
                     if 'telephone.txt' in line:
                         html.write('\n<td>Telephone numbers (may include 3rd party information)</td>')
                         html.write('\n<td>' + line.split()[1] + '</td>')
                         html.write('\n<td>See: <a href="./telephone_histogram.txt">Telephone # histogram</a></td>')
-                        pii_list.append('telephone numbers')
+                        pii_list.append('TELEPHONE NOs')
                     if 'find.txt' in line:
                         html.write('\n<td>Sensitive terms and phrases</td>')
                         html.write('\n<td>' + line.split()[1] + '</td>')
