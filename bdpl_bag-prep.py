@@ -153,10 +153,10 @@ def main():
     
     '''SET VARIABLES'''
     #Identify where files will be moved ###### UPDATE TO ARCHIVER location #######
-    destination = "C:\\BDPL\\Archiver"
+    destination = 'Y:/Archiver_spool/general%2fmediaimages'
     
     #open master workbook and get ready to write
-    master_spreadsheet = 'C:\\BDPL\\bdpl_master_spreadsheet.xlsx'
+    master_spreadsheet = 'Y:/bdpl_master_spreadsheet.xlsx'
     master_wb = openpyxl.load_workbook(master_spreadsheet)
     item_ws = master_wb['Item']
     cumulative_ws = master_wb['Cumulative']
