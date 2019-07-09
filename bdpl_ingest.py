@@ -34,6 +34,7 @@ import pickle
 import time
 import openpyxl
 import glob
+import hashlib
 
 # from dfxml project
 import Objects
@@ -848,7 +849,7 @@ def run_siegfried(files_dir, reports_dir, siegfried_version):
     print('\n\nFILE FORMAT IDENTIFICATION: SIEGFRIED')
     """Run siegfried on directory"""  
     sf_file = os.path.join(reports_dir, 'siegfried.csv')
-    sf_command = 'sf -z -csv -hash md5 "%s" > "%s"' % (files_dir, sf_file)
+    sf_command = 'sf -z -csv "%s" > "%s"' % (files_dir, sf_file)
     
     #create timestamp
     timestamp = str(datetime.datetime.now())
@@ -883,7 +884,7 @@ def import_csv(cursor, conn, reports_dir):
             header = False # gather column names from first row of csv
             sql = "DROP TABLE IF EXISTS siegfried"
             cursor.execute(sql)
-            sql = "CREATE TABLE siegfried (filename text, filesize text, modified text, errors text, hash text, namespace text, id text, format text, version text, mime text, basis text, warning text)"
+            sql = "CREATE TABLE siegfried (filename text, filesize text, modified text, errors text, namespace text, id text, format text, version text, mime text, basis text, warning text)"
             cursor.execute(sql)
             insertsql = "INSERT INTO siegfried VALUES (%s)" % (", ".join([ "?" for column in row ]))
             rowlen = len(row)
@@ -895,8 +896,10 @@ def import_csv(cursor, conn, reports_dir):
     f.close()
 
 def generate_reports(cursor, html, reports_dir):
+    temp_dir = bdpl_vars()['temp_dir']
+    
     """Run sql queries on db to generate reports, write to csv and html"""
-    full_header = ['Filename', 'Filesize', 'Date modified', 'Errors', 'Checksum', 
+    full_header = ['Filename', 'Filesize', 'Date modified', 'Errors', 
                 'Namespace', 'ID', 'Format', 'Format version', 'MIME type', 
                 'Basis for ID', 'Warning']
     
@@ -906,7 +909,6 @@ def generate_reports(cursor, html, reports_dir):
     format_header = ['Format', 'ID', 'Count']
     sqlite_to_csv(sql, path, format_header, cursor)
     write_html('File formats', path, ',', html)
-    os.remove(path)
 
     # sorted format and version list report
     sql = "SELECT format, id, version, COUNT(*) as 'num' FROM siegfried GROUP BY format, version ORDER BY num DESC"
@@ -914,7 +916,6 @@ def generate_reports(cursor, html, reports_dir):
     version_header = ['Format', 'ID', 'Version', 'Count']
     sqlite_to_csv(sql, path, version_header, cursor)
     write_html('File format versions', path, ',', html)
-    os.remove(path)
 
     # sorted mimetype list report
     sql = "SELECT mime, COUNT(*) as 'num' FROM siegfried GROUP BY mime ORDER BY num DESC"
@@ -922,7 +923,6 @@ def generate_reports(cursor, html, reports_dir):
     mime_header = ['MIME type', 'Count']
     sqlite_to_csv(sql, path, mime_header, cursor)
     write_html('MIME types', path, ',', html)
-    os.remove(path)
 
     # dates report
     sql = "SELECT SUBSTR(modified, 1, 4) as 'year', COUNT(*) as 'num' FROM siegfried GROUP BY year ORDER BY num DESC"
@@ -930,28 +930,36 @@ def generate_reports(cursor, html, reports_dir):
     year_header = ['Year Last Modified', 'Count']
     sqlite_to_csv(sql, path, year_header, cursor)
     write_html('Last modified dates by year', path, ',', html)
-    os.remove(path)
     
     # unidentified files report
     sql = "SELECT * FROM siegfried WHERE id='UNKNOWN';"
     path = os.path.join(reports_dir, 'unidentified.csv')
     sqlite_to_csv(sql, path, full_header, cursor)
     write_html('Unidentified', path, ',', html)
-    os.remove(path)
     
     # errors report
     sql = "SELECT * FROM siegfried WHERE errors <> '';"
     path = os.path.join(reports_dir, 'errors.csv')
     sqlite_to_csv(sql, path, full_header, cursor)
     write_html('Errors', path, ',', html)
-    os.remove(path)
     
-    # duplicates report
-    sql = "SELECT * FROM siegfried t1 WHERE EXISTS (SELECT 1 from siegfried t2 WHERE t2.hash = t1.hash AND t1.filename != t2.filename) AND filesize<>'0' ORDER BY hash;"
+    # duplicates report 
+  
+    #retrieve our 'duplicates' file
+    dup_list = []
+    with open(os.path.join(temp_dir, 'duplicates.txt'), 'rb') as f:
+        dup_list = pickle.load(f)
+    
+    #write info to our CSV file
     path = os.path.join(reports_dir, 'duplicates.csv')
-    sqlite_to_csv(sql, path, full_header, cursor)
+    with open(path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        dup_header = ['Filename', 'Filesize', 'Date modified', 'Checksum']
+        writer.writerow(dup_header)
+        for item in dup_list:
+            writer.writerow(item)
+
     write_html('Duplicates', path, ',', html)
-    os.remove(path)
     
 def sqlite_to_csv(sql, path, header, cursor):
     """Write sql query result to csv"""
@@ -1075,7 +1083,7 @@ def write_html(header, path, file_delimiter, html):
             hash_list = []
             for row in r:
                 if row:
-                    hash_list.append(row[4])
+                    hash_list.append(row[3])
             # deduplicate md5_list
             hash_list = list(OrderedDict.fromkeys(hash_list))
             hash_list.remove('Checksum')
@@ -1086,17 +1094,14 @@ def write_html(header, path, file_delimiter, html):
                 html.write('\n<thead>')
                 html.write('\n<tr>')
                 html.write('\n<th>Filename</th><th>Filesize</th>')
-                html.write('<th>Date modified</th><th>Errors</th>')
-                html.write('<th>Checksum</th><th>Namespace</th>')
-                html.write('<th>ID</th><th>Format</th>')
-                html.write('<th>Format version</th><th>MIME type</th>')
-                html.write('<th>Basis for ID</th><th>Warning</th>')
+                html.write('<th>Date modified</th>')
+                html.write('<th>Checksum</th>')
                 html.write('\n</tr>')
                 html.write('\n</thead>')
                 in_file.seek(0) # back to beginning of file
                 html.write('\n<tbody>')
                 for row in r:
-                    if row[4] == '%s' % hash_value:
+                    if row[3] == '%s' % hash_value:
                         # write data
                         html.write('\n<tr>')
                         for column in row:
@@ -1169,8 +1174,6 @@ def close_files_conns_on_exit(html, conn, cursor):
     cursor.close()
     conn.close()
     html.close()
-    
- 
 
 def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_dir, log_dir):
     """Get aggregate statistics and write to html report"""
@@ -1182,17 +1185,46 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     cursor.execute("SELECT COUNT(*) from siegfried where filesize='0';") # empty files
     empty_files = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(DISTINCT hash) from siegfried WHERE filesize<>'0';") # distinct files
-    distinct_files = cursor.fetchone()[0]
+    #Get stats on duplicates
+    temp_dir = bdpl_vars()['temp_dir']
+    dup_list = []
+    
+    #first, retrieve our 'checksums' file
+    file_stats = []
+    with open(os.path.join(temp_dir, 'checksums.txt'), 'rb') as f:
+        file_stats = pickle.load(f)
 
-    cursor.execute("SELECT COUNT(hash) FROM siegfried t1 WHERE EXISTS (SELECT 1 from siegfried t2 WHERE t2.hash = t1.hash AND t1.filename != t2.filename) AND filesize<>'0'") # duplicates
-    all_dupes = cursor.fetchone()[0]
+    #next, create a new dictionary that IDs checksums that correspond to 1 or more files
+    stat_dict = {}
+    for dict in file_stats:
+        if int(dict['size']) > 0:
+            if dict['checksum'] in stat_dict:
+                stat_dict[dict['checksum']].append(dict['name'])
+            else:
+                stat_dict[dict['checksum']] = [dict['name']]
+   
+    #go through new dict and find checksums with duplicates
+    for chksm in [key for key, values in stat_dict.items() if len(values) > 1]:
+        for fname in stat_dict[chksm]:
+            temp = [item for item in file_stats if item['checksum'] == chksm and item['name'] == fname][0]
+            dup_list.append([temp['name'], temp['size'], temp['mtime'], temp['checksum']])
+    
+    #save this duplicate file for later when we need to write to html
+    with open(os.path.join(temp_dir, 'duplicates.txt'), 'wb') as f:
+        pickle.dump(dup_list, f)
+    
+    #total duplicates = total length of duplicate list
+    all_dupes = len(dup_list)
 
-    cursor.execute("SELECT COUNT(DISTINCT hash) FROM siegfried t1 WHERE EXISTS (SELECT 1 from siegfried t2 WHERE t2.hash = t1.hash AND t1.filename != t2.filename) AND filesize<>'0'") # distinct duplicates
-    distinct_dupes = cursor.fetchone()[0]
+    #distinct duplicates = # of unique checksum
+    distinct_dupes = len(set([c[3] for c in dup_list]))
 
+    #duplicate copies = # of unique files that may have one or more copies
     duplicate_copies = int(all_dupes) - int(distinct_dupes) # number of duplicate copies of unique files
     duplicate_copies = str(duplicate_copies)
+    
+    distinct_files = int(num_files) - int(duplicate_copies)
+    distinct_files = str(distinct_files)
 
     cursor.execute("SELECT COUNT(*) FROM siegfried WHERE id='UNKNOWN';") # unidentified files
     unidentified_files = cursor.fetchone()[0]
@@ -1502,8 +1534,16 @@ def checkFiles(some_dir):
     else:
         return True
 
+def md5(fname):
+    hash_md5 = hashlib.md5()
+    with open(fname, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
 def produce_dfxml(target):
     dfxml_output = bdpl_vars()['dfxml_output']
+    temp_dir = bdpl_vars()['temp_dir']
     
     #check if the output file exists AND if the action was recorded in PREMIS; if so, return
     if os.path.exists(dfxml_output) and check_premis('message digest calculation', 'eventType'):
@@ -1519,23 +1559,104 @@ def produce_dfxml(target):
         
         dfxml_cmd = 'fiwalk-0.6.3 -x %s > %s' % (target, dfxml_output)
         exitcode = subprocess.call(dfxml_cmd, shell=True, text=True)
+        
+        #parse dfxml to get info for later...
+        tree = etree.parse(dfxml_output)
+        
+        file_objects = tree.xpath("//fileobject")
+        file_stats = []
+        
+        for file_object in file_objects:
+            if file_object.findtext("./name_type") == "r" and file_object.findtext("./alloc") == "1":
+                target = file_object.findtext("./filename")
+                size = file_object.findtext("./filesize")
+                checksum = file_object.findtext("./hashdigest[@type='md5']")
+                mtime = datetime.datetime.utcfromtimestamp(file_object.findtext("./mtime")).isoformat()
+
+                file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
+                file_stats.append(file_dict)
     
-    #use md5deep if we have a folder. NOTE: this will fail on paths that exceed MAX_PATH    
+    #use custom operation if we have a copy operation    
     elif os.path.isdir(target):
-        print('\n\nDIGITAL FORENSICS XML CREATION: MD5DEEP')
-        dfxml_ver = subprocess.check_output('md5deep64 -v', shell=True, text=True)
-        dfxml_ver = 'md5deep64.exe %s' % dfxml_ver
-    
-        dfxml_cmd = 'md5deep64 -rd %s > %s' % (target, dfxml_output)        
-        exitcode = subprocess.call(dfxml_cmd, shell=True, text=True)
+        print('\n\nDIGITAL FORENSICS XML CREATION: bdpl_ingest')
+        
+        timestamp = str(datetime.datetime.now().isoformat())
+        
+        file_stats = []
+
+        for root, dirnames, filenames in os.walk(target):
+            for file in filenames:
+                target = os.path.join(root, file)
+                size = os.path.getsize(target)
+                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(target)).isoformat()[:-7]
+                ctime = datetime.datetime.fromtimestamp(os.path.getctime(target)).isoformat()[:-7]
+                atime = datetime.datetime.fromtimestamp(os.path.getatime(target)).isoformat()[:-7]
+                checksum = md5(target)
+                
+                file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'ctime' : ctime, 'atime' : atime, 'checksum' : checksum}
+                
+                file_stats.append(file_dict)
+        
+        dc_namespace = 'http://purl.org/dc/elements/1.1/'
+        dc = "{%s}" % dc_namespace
+        NSMAP = {None : 'http://www.forensicswiki.org/wiki/Category:Digital_Forensics_XML',
+                'xsi': "http://www.w3.org/2001/XMLSchema-instance",
+                'dc' : dc_namespace}
+
+        dfxml = ET.Element("dfxml", nsmap=NSMAP, version="1.0")
+        
+        metadata = ET.SubElement(dfxml, "metadata")
+        
+        dctype = ET.SubElement(metadata, dc + "type")
+        dctype.text = "Hash List"
+        
+        creator = ET.SubElement(dfxml, 'creator')
+        
+        program = ET.SubElement(creator, 'program')
+        program.text = 'bdpl_ingest'
+        
+        execution_environment = ET.SubElement(creator, 'execution_environment')
+        
+        start_time = ET.SubElement(execution_environment, 'start_time')
+        start_time.text = timestamp
+        
+        for f in file_stats:
+            fileobject = ET.SubElement(dfxml, 'fileobject')
+            
+            filename = ET.SubElement(fileobject, 'filename')
+            filename.text = f['name']
+            
+            filesize = ET.SubElement(fileobject, 'filesize')
+            filesize.text = str(f['size'])
+
+            modifiedtime = ET.SubElement(fileobject, 'mtime')
+            modifiedtime.text = f['mtime']
+        
+            createdtime = ET.SubElement(fileobject, 'ctime')
+            createdtime.text = f['ctime']
+            
+            accesstime = ET.SubElement(fileobject, 'atime')
+            accesstime.text = f['atime']
+                
+            hashdigest = ET.SubElement(fileobject, 'hashdigest', type='md5')
+            hashdigest.text = f['checksum']
+
+        tree = ET.ElementTree(dfxml)
+        
+        tree.write(dfxml_output, pretty_print=True, xml_declaration=True, encoding="utf-8")      
     
     else:
         print('\n\nERROR: %s does not appear to exist...' % target)
         return
     
+    #save stats for reporting...
+    checksums = os.path.join(temp_dir, 'checksums.txt')
+    with open (checksums, 'wb') as f:
+        pickle.dump(file_stats, f)
+    
     #save PREMIS
     premis_list = pickleLoad('premis_list')        
-    premis_list.append(premis_dict(timestamp, 'message digest calculation', exitcode, dfxml_cmd, 'Extracted information about the strucutre and characteristics of content, including file checksums.', dfxml_ver))
+    premis_list.append(premis_dict(timestamp, 'message digest calculation', '0', 'bdpl_ingest.py', 'Extracted information about the strucutre and characteristics of content, including file checksums.', 'https://github.com/IUBLibTech/bdpl_ingest'))
     pickleDump('premis_list', premis_list)
 
 def optical_drive_letter():
@@ -1613,9 +1734,6 @@ def dir_tree(target):
     pickleDump('premis_list', premis_list)
 
 def format_analysis(files_dir, reports_dir, log_dir, metadata, html):
-    #return if Siegfried already run
-    if check_premis('format identification', 'eventType'):
-        return
     
     siegfried_db = os.path.join(metadata, 'siegfried.sqlite')
     conn = sqlite3.connect(siegfried_db)
@@ -1626,7 +1744,8 @@ def format_analysis(files_dir, reports_dir, log_dir, metadata, html):
     sfcmd = 'sf -version'
     siegfried_version = subprocess.check_output(sfcmd, shell=True, text=True).replace('\n', ' ')
     
-    run_siegfried(files_dir, reports_dir, siegfried_version) # run siegfried
+    if not check_premis('format identification', 'eventType'):
+        run_siegfried(files_dir, reports_dir, siegfried_version) # run siegfried
 
     import_csv(cursor, conn, reports_dir) # load csv into sqlite db
     get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_dir, log_dir) # get aggregate stats and write to html file
@@ -1704,7 +1823,7 @@ def analyzeContent():
         produce_dfxml(files_dir)
         
         #document directory structure
-        dir_tree(source.get())
+        dir_tree(files_dir)
     
     elif jobType.get() == 'DVD':
         #generate dfxml for preservation copy
