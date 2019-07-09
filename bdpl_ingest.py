@@ -23,7 +23,7 @@ import sqlite3
 import subprocess
 import sys
 import uuid
-from lxml import etree as ET
+from lxml import etree
 import tempfile
 import fnmatch
 from tkinter import *
@@ -419,8 +419,8 @@ def TransferContent():
         premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, lsdvdcmd, 'Extracted content information from DVD, including titles, chapters, audio streams and video.', lsdvd_ver))
         
         #check file to see how many titles are on DVD using lsdvd XML output
-        parser = ET.XMLParser(recover=True)
-        doc = ET.parse(lsdvdout, parser=parser)
+        parser = etree.XMLParser(recover=True)
+        doc = etree.parse(lsdvdout, parser=parser)
         titlecount = int(doc.xpath("count(//lsdvd//track)"))
         
         #check current directory; change to a temp directory to store files
@@ -1435,7 +1435,7 @@ def print_premis(premis_path):
     
     premis_list = pickleLoad('premis_list')
     
-    attr_qname = ET.QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation")
+    attr_qname = etree.QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation")
 
     PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
 
@@ -1444,55 +1444,55 @@ def print_premis(premis_path):
     NSMAP = {'premis' : PREMIS_NAMESPACE,
             "xsi": "http://www.w3.org/2001/XMLSchema-instance"}
 
-    root = ET.Element(PREMIS + 'premis', {attr_qname: "http://www.loc.gov/premis/v3 https://www.loc.gov/standards/premis/premis.xsd"}, version="3.0", nsmap=NSMAP)
+    root = etree.Element(PREMIS + 'premis', {attr_qname: "http://www.loc.gov/premis/v3 https://www.loc.gov/standards/premis/premis.xsd"}, version="3.0", nsmap=NSMAP)
     
-    object = ET.SubElement(root, PREMIS + 'object', attrib={ET.QName(NSMAP['xsi'], 'type'): 'premis:file'})
-    objectIdentifier = ET.SubElement(object, PREMIS + 'objectIdentifier')
-    objectIdentifierType = ET.SubElement(objectIdentifier, PREMIS + 'objectIdentifierType')
+    object = etree.SubElement(root, PREMIS + 'object', attrib={etree.QName(NSMAP['xsi'], 'type'): 'premis:file'})
+    objectIdentifier = etree.SubElement(object, PREMIS + 'objectIdentifier')
+    objectIdentifierType = etree.SubElement(objectIdentifier, PREMIS + 'objectIdentifierType')
     objectIdentifierType.text = 'local'
-    objectIdentifierValue = ET.SubElement(objectIdentifier, PREMIS + 'objectIdentifierValue')
+    objectIdentifierValue = etree.SubElement(objectIdentifier, PREMIS + 'objectIdentifierValue')
     objectIdentifierValue.text = barcode.get()
-    objectCharacteristics = ET.SubElement(object, PREMIS + 'objectCharacteristics')
-    compositionLevel = ET.SubElement(objectCharacteristics, PREMIS + 'compositionLevel')
+    objectCharacteristics = etree.SubElement(object, PREMIS + 'objectCharacteristics')
+    compositionLevel = etree.SubElement(objectCharacteristics, PREMIS + 'compositionLevel')
     compositionLevel.text = '0'
-    format = ET.SubElement(objectCharacteristics, PREMIS + 'format')
-    formatDesignation = ET.SubElement(format, PREMIS + 'formatDesignation')
-    formatName = ET.SubElement(formatDesignation, PREMIS + 'formatName')
+    format = etree.SubElement(objectCharacteristics, PREMIS + 'format')
+    formatDesignation = etree.SubElement(format, PREMIS + 'formatDesignation')
+    formatName = etree.SubElement(formatDesignation, PREMIS + 'formatName')
     formatName.text = 'Tape Archive Format'
-    formatRegistry = ET.SubElement(format, PREMIS + 'formatRegistry')
-    formatRegistryName = ET.SubElement(formatRegistry, PREMIS + 'formatRegistryName')
+    formatRegistry = etree.SubElement(format, PREMIS + 'formatRegistry')
+    formatRegistryName = etree.SubElement(formatRegistry, PREMIS + 'formatRegistryName')
     formatRegistryName.text = 'PRONOM'
-    formatRegistryKey = ET.SubElement(formatRegistry, PREMIS + 'formatRegistryKey')
+    formatRegistryKey = etree.SubElement(formatRegistry, PREMIS + 'formatRegistryKey')
     formatRegistryKey.text = 'x-fmt/265' 
     
     for entry in premis_list:
-        event = ET.SubElement(root, PREMIS + 'event')
-        eventID = ET.SubElement(event, PREMIS + 'eventIdentifier')
-        eventIDtype = ET.SubElement(eventID, PREMIS + 'eventIdentifierType')
+        event = etree.SubElement(root, PREMIS + 'event')
+        eventID = etree.SubElement(event, PREMIS + 'eventIdentifier')
+        eventIDtype = etree.SubElement(eventID, PREMIS + 'eventIdentifierType')
         eventIDtype.text = 'UUID'
-        eventIDval = ET.SubElement(eventID, PREMIS + 'eventIdentifierValue')
+        eventIDval = etree.SubElement(eventID, PREMIS + 'eventIdentifierValue')
         eventIDval.text = str(uuid.uuid4())
 
-        eventType = ET.SubElement(event, PREMIS + 'eventType')
+        eventType = etree.SubElement(event, PREMIS + 'eventType')
         eventType.text = entry['eventType']
 
-        eventDateTime = ET.SubElement(event, PREMIS + 'eventDateTime')
+        eventDateTime = etree.SubElement(event, PREMIS + 'eventDateTime')
         eventDateTime.text = entry['timestamp']
 
-        eventDetailInfo = ET.SubElement(event, PREMIS + 'eventDetailInformation')
-        eventDetail = ET.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
+        eventDetailInfo = etree.SubElement(event, PREMIS + 'eventDetailInformation')
+        eventDetail = etree.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
         eventDetail.text = entry['eventDetailInfo']
         
         #include additional eventDetailInfo to clarify action
-        eventDetailInfo = ET.SubElement(event, PREMIS + 'eventDetailInformation')
-        eventDetail = ET.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
+        eventDetailInfo = etree.SubElement(event, PREMIS + 'eventDetailInformation')
+        eventDetail = etree.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
         eventDetail.text = entry['eventDetailInfo_additional']
 
-        eventOutcomeInfo = ET.SubElement(event, PREMIS + 'eventOutcomeInformation')
-        eventOutcome = ET.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcome')
+        eventOutcomeInfo = etree.SubElement(event, PREMIS + 'eventOutcomeInformation')
+        eventOutcome = etree.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcome')
         eventOutcome.text = str(entry['eventOutcomeDetail'])
-        eventOutDetail = ET.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcomeDetail')
-        eventOutDetailNote = ET.SubElement(eventOutDetail, PREMIS + 'eventOutcomeDetailNote')
+        eventOutDetail = etree.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcomeDetail')
+        eventOutDetailNote = etree.SubElement(eventOutDetail, PREMIS + 'eventOutcomeDetailNote')
         if entry['eventOutcomeDetail'] == '0':
             eventOutDetailNote.text = 'Successful completion'
         elif entry['eventOutcomeDetail'] == 0:
@@ -1500,27 +1500,27 @@ def print_premis(premis_path):
         else:
             eventOutDetailNote.text = 'Unsuccessful completion; refer to logs.'
 
-        linkingAgentID = ET.SubElement(event, PREMIS + 'linkingAgentIdentifier')
-        linkingAgentIDtype = ET.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
+        linkingAgentID = etree.SubElement(event, PREMIS + 'linkingAgentIdentifier')
+        linkingAgentIDtype = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
         linkingAgentIDtype.text = 'local'
-        linkingAgentIDvalue = ET.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
+        linkingAgentIDvalue = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
         linkingAgentIDvalue.text = 'IUL BDPL'
-        linkingAgentRole = ET.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
+        linkingAgentRole = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
         linkingAgentRole.text = 'implementer'
-        linkingAgentID = ET.SubElement(event, PREMIS + 'linkingAgentIdentifier')
-        linkingAgentIDtype = ET.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
+        linkingAgentID = etree.SubElement(event, PREMIS + 'linkingAgentIdentifier')
+        linkingAgentIDtype = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
         linkingAgentIDtype.text = 'local'
-        linkingAgentIDvalue = ET.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
+        linkingAgentIDvalue = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
         linkingAgentIDvalue.text = entry['linkingAgentIDvalue']
-        linkingAgentRole = ET.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
+        linkingAgentRole = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
         linkingAgentRole.text = 'executing software'
-        linkingObjectID = ET.SubElement(event, PREMIS + 'linkingObjectIdentifier')
-        linkingObjectIDtype = ET.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierType')
+        linkingObjectID = etree.SubElement(event, PREMIS + 'linkingObjectIdentifier')
+        linkingObjectIDtype = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierType')
         linkingObjectIDtype.text = 'local'
-        linkingObjectIDvalue = ET.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierValue')
+        linkingObjectIDvalue = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierValue')
         linkingObjectIDvalue.text = barcode.get()
     
-    premis_tree = ET.ElementTree(root)
+    premis_tree = etree.ElementTree(root)
     
     premis_tree.write(premis_path, pretty_print=True, xml_declaration=True, encoding="utf-8")
 
@@ -1609,45 +1609,45 @@ def produce_dfxml(target):
                 'xsi': "http://www.w3.org/2001/XMLSchema-instance",
                 'dc' : dc_namespace}
 
-        dfxml = ET.Element("dfxml", nsmap=NSMAP, version="1.0")
+        dfxml = etree.Element("dfxml", nsmap=NSMAP, version="1.0")
         
-        metadata = ET.SubElement(dfxml, "metadata")
+        metadata = etree.SubElement(dfxml, "metadata")
         
-        dctype = ET.SubElement(metadata, dc + "type")
+        dctype = etree.SubElement(metadata, dc + "type")
         dctype.text = "Hash List"
         
-        creator = ET.SubElement(dfxml, 'creator')
+        creator = etree.SubElement(dfxml, 'creator')
         
-        program = ET.SubElement(creator, 'program')
+        program = etree.SubElement(creator, 'program')
         program.text = 'bdpl_ingest'
         
-        execution_environment = ET.SubElement(creator, 'execution_environment')
+        execution_environment = etree.SubElement(creator, 'execution_environment')
         
-        start_time = ET.SubElement(execution_environment, 'start_time')
+        start_time = etree.SubElement(execution_environment, 'start_time')
         start_time.text = timestamp
         
         for f in file_stats:
-            fileobject = ET.SubElement(dfxml, 'fileobject')
+            fileobject = etree.SubElement(dfxml, 'fileobject')
             
-            filename = ET.SubElement(fileobject, 'filename')
+            filename = etree.SubElement(fileobject, 'filename')
             filename.text = f['name']
             
-            filesize = ET.SubElement(fileobject, 'filesize')
+            filesize = etree.SubElement(fileobject, 'filesize')
             filesize.text = str(f['size'])
 
-            modifiedtime = ET.SubElement(fileobject, 'mtime')
+            modifiedtime = etree.SubElement(fileobject, 'mtime')
             modifiedtime.text = f['mtime']
         
-            createdtime = ET.SubElement(fileobject, 'ctime')
+            createdtime = etree.SubElement(fileobject, 'ctime')
             createdtime.text = f['ctime']
             
-            accesstime = ET.SubElement(fileobject, 'atime')
+            accesstime = etree.SubElement(fileobject, 'atime')
             accesstime.text = f['atime']
                 
-            hashdigest = ET.SubElement(fileobject, 'hashdigest', type='md5')
+            hashdigest = etree.SubElement(fileobject, 'hashdigest', type='md5')
             hashdigest.text = f['checksum']
 
-        tree = ET.ElementTree(dfxml)
+        tree = etree.ElementTree(dfxml)
         
         tree.write(dfxml_output, pretty_print=True, xml_declaration=True, encoding="utf-8")      
     
