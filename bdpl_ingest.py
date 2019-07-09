@@ -165,6 +165,12 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
         for line in out.splitlines():
             if 'ZIP 100' in line:
                   drive_ltr = line.split()[2]
+        
+        try:
+            drive_ltr
+        except UnboundLocalError:
+            print('\n\nNOTE: Zip drive not recognized.  If you have not done so, insert disk into drive and allow device to complete initial loading.')
+            return
 
         cmd = 'cat /proc/partitions'
         out2 = subprocess.check_output(cmd, shell=True, text=True)
