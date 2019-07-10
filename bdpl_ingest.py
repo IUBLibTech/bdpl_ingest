@@ -317,8 +317,12 @@ def TransferContent():
         #get info on the disk image (fsstat, ils, mmls, and disktype) and generate DFXML
         disktype_output = os.path.join(reports_dir, 'disktype.txt')
         mmls_output = os.path.join(reports_dir, 'mmls.txt')
-        
         disk_image_info(imagefile, reports_dir)
+        
+        #set our software versions for unhfs and tsk_recover, just in case...
+        cmd = 'unhfs 2>&1'
+        unhfs_carve_ver = subprocess.check_output(cmd, shell=True, text=True).splitlines()[0]
+        tsk_carve_ver = 'tsk_recover: %s ' % subprocess.check_output('tsk_recover -V').strip()
         
         #see what kind of filesystems are present
         fs_list = []
@@ -331,8 +335,9 @@ def TransferContent():
         pickleDump('fs_list', fs_list)
 
         #now parse output to get information on filesystems and (if present) partitions.  We will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
-        secureCopy_list = ['UDF', 'ISO9660']
+        secureCopy_list = ['udf', 'iso9660']
         unhfs_list = ['osx', 'hfs', 'Apple', 'mfs']
+        tsk_list = ['ntfs', 'fat', 'exfat', 'ufs', 'ext', 'yaffs2']
         
         #next, we need to see if there are any partitions on the image
         if os.stat(mmls_output).st_size == 0:
@@ -344,14 +349,17 @@ def TransferContent():
                 
                 print('\n\nDisktype has identified the following file systems: ', ', '.join(fs_list))
                 
-                if any(fs in ' '.join(fs_list) for fs in secureCopy_list):
+                if any(fs.lower() in ' '.join(fs_list) for fs in secureCopy_list):
                     secureCopy(optical_drive_letter(), files_dir)
 
-                elif any(fs in ' '.join(fs_list) for fs in unhfs_list):
-                    carvefiles('unhfs', imagefile, files_dir, '')
-                    
+                elif any(fs.lower() in ' '.join(fs_list) for fs in unhfs_list):
+                    carvefiles('unhfs', imagefile, files_dir, unhfs_carve_ver, '')
+                
+                elif any(fs.lower() in ' '.join(fs_list) for fs in tsk_list): 
+                    carvefiles('tsk_recover', imagefile, files_dir, tsk_carve_ver, '')
+                
                 else:
-                    carvefiles('tsk_recover', imagefile, files_dir, '')
+                    print('\n\nFile system not recognized by tools')
                     
             else:
                 print('\n\nDisktype unable to identify image file system(s)')
@@ -361,7 +369,7 @@ def TransferContent():
             partition_info = []
             part_no = 0
             with open(mmls_output, 'r') as f:
-                print('\n\nmmls identified one or more partitions')
+                print('\n\nOne or more partitions identified by mmls')
                 
                 #skip the first 4 mmls header lines
                 for line in f.readlines()[5:]:
@@ -379,11 +387,14 @@ def TransferContent():
             
             for part_dict in partition_info:
                 
-                if any(fs in part_dict['desc'] for fs in unhfs_list):
-                    carvefiles('unhfs', imagefile, files_dir, part_dict)
+                if any(fs.lower() in part_dict['desc'] for fs in unhfs_list):
+                    carvefiles('unhfs', imagefile, files_dir, unhfs_carve_ver, part_dict)
                                   
+                elif any(fs.lower() in part_dict['desc'] for fs in tsk_list): 
+                    carvefiles('tsk_recover', imagefile, files_dir, tsk_carve_ver, part_dict)
+                
                 else:
-                    carvefiles('tsk_recover', imagefile, files_dir, part_dict)
+                    print('\n\nFile system not recognized by tools')
         
         print('\n\nFILE REPLICATION COMPLETED; PROCEED TO NEXT STEP')
             
@@ -418,11 +429,15 @@ def TransferContent():
         
         premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, lsdvdcmd, 'Extracted content information from DVD, including titles, chapters, audio streams and video.', lsdvd_ver))
         
-        #check file to see how many titles are on DVD using lsdvd XML output
+        #check file to see how many titles are on DVD using lsdvd XML output.  If we're unable to read lsdvd output, assume 1 title as a default
         parser = etree.XMLParser(recover=True)
-        doc = etree.parse(lsdvdout, parser=parser)
-        titlecount = int(doc.xpath("count(//lsdvd//track)"))
-        
+        if os.path.exists(lsdvdout):
+            doc = etree.parse(lsdvdout, parser=parser)
+        try:
+            titlecount = int(doc.xpath("count(//lsdvd//track)"))
+        except:
+            titlecount = 1
+            
         #check current directory; change to a temp directory to store files
         bdpl_cwd = 'C:\\BDPL\\scripts'
         
@@ -600,23 +615,16 @@ def unhfs_func(start, out, imagefile):
     
     subprocess.call(cmd, shell=True)
 
-def carvefiles(tool, imagefile, files_dir, part_dict):
+def carvefiles(tool, imagefile, files_dir, carve_ver, part_dict):
     #set commands based on tool type and if there are partitions (will include partition dictionary if so)
     
     #set default variable; this will be reset if there are multiple partitions
     outfolder = files_dir
     
     if tool == 'unhfs':
-        unhfs_ver = os.path.join(bdpl_vars()['temp_dir'], 'unhfs.txt')
-        if not os.path.exists(unhfs_ver):
-            cmd = 'unhfs > %s 2>&1' % unhfs_ver
-            subprocess.check_output(cmd, shell=True)
-        
-        with open(unhfs_ver, 'r') as f:
-            carve_ver = f.read().splitlines()[0]
         
         if part_dict == '':
-            carve_cmd = 'unhfs -resforks APPLEDOUBLE -o "%s" "%s"' % (files_dir, imagefile)
+            carve_cmd = 'unhfs -sfm-substitutions -resforks APPLEDOUBLE -o "%s" "%s" 2>nul' % (files_dir, imagefile)
         else:
             #create a new destination folder for each partition
             outfolder = os.path.join(files_dir, 'partition_%s' % part_dict['part_id'].zfill(2))
@@ -624,10 +632,9 @@ def carvefiles(tool, imagefile, files_dir, part_dict):
                 os.makedirs(outfolder)
             
             #indicate the partition # (starting from 0) for each
-            carve_cmd = 'unhfs -partition %s -resforks APPLEDOUBLE -o "%s" "%s"' % (part_dict['part_id'], outfolder, imagefile)
+            carve_cmd = 'unhfs -sfm-substitutions -partition %s -resforks APPLEDOUBLE -o "%s" "%s" 2>nul' % (part_dict['part_id'], outfolder, imagefile)
     
     else:
-        carve_ver = 'tsk_recover: %s ' % subprocess.check_output('tsk_recover -V').strip()
         
         if part_dict == '':
             carve_cmd = 'tsk_recover -a %s %s' % (imagefile, files_dir)
@@ -642,7 +649,7 @@ def carvefiles(tool, imagefile, files_dir, part_dict):
             #indicate the sector offset for each partition
             carve_cmd = 'tsk_recover -a -o %s %s %s' % (part_dict['start'], imagefile, outfolder)
         
-    print('\n\n\tTOOL: %s\n\tSOURCE: %s \n\tDESTINATION: %s' % (tool, files_dir, imagefile))
+    print('\n\n\tTOOL: %s\n\tSOURCE: %s \n\tDESTINATION: %s\n' % (tool, outfolder, imagefile))
     
     timestamp = str(datetime.datetime.now())  
     exitcode = subprocess.call(carve_cmd, shell=True)
@@ -651,14 +658,20 @@ def carvefiles(tool, imagefile, files_dir, part_dict):
     premis_list.append(premis_dict(timestamp, 'replication', exitcode, carve_cmd, "Created a copy of an object that is, bit-wise, identical to the original.", carve_ver))
     pickleDump('premis_list', premis_list)
     
+    #if no files were extracted, remove partition folder.
+    if not checkFiles(outfolder):
+        os.rmdir(outfolder)
+    
     #if tsk_recover has been run, go through and fix the file MAC times
-    if tool == 'tsk_recover':
+    if tool == 'tsk_recover' and exitcode == 0:
         
         #generate DFXML with fiwalk
-        produce_dfxml(imagefile)
+        dfxml_output = bdpl_vars()['dfxml_output']
+        if not os.path.exists(dfxml_output):
+            produce_dfxml(imagefile)
         
         #use DFXML output to get correct MAC times and update files
-        fix_dates(outfolder)
+        fix_dates(outfolder, dfxml_output)
     
 def time_to_int(str_time):
     """ Convert datetime to unix integer value """
@@ -666,12 +679,10 @@ def time_to_int(str_time):
         "%Y-%m-%dT%H:%M:%S").timetuple())
     return dt
     
-def fix_dates(files_dir):
+def fix_dates(files_dir, dfxml_output):
     #adapted from Timothy Walsh's Disk Image Processor: https://github.com/CCA-Public/diskimageprocessor
     
     print('\n\nFILE MAC TIME CORRECTION (USING DFXML)')
-   
-    dfxml_output = bdpl_vars()['dfxml_output']
     
     #return if fiwalk was unable to read file system
     with open(dfxml_output, 'r') as f:
@@ -1533,7 +1544,8 @@ def checkFiles(some_dir):
     #make sure there are files in the 'files' directory
     filecounter = 0
     for dirpath, dirnames, contents in os.walk(some_dir):
-        filecounter += len(contents)
+        for f in contents:
+            filecounter += 1
     if filecounter == 0:
         print('\n\nError; no files located at %s. Check settings and run again; you may need to manually copy or extract files.' % some_dir)
         return False
@@ -1815,7 +1827,7 @@ def analyzeContent():
             fs_list = pickleLoad('fs_list')
             
             #if it's an HFS+ file system, we can use fiwalk on the disk image; otherwise, use md5deep on the file directory
-            if 'hfs+' in (fs.lower() for fs in fs_list):
+            if 'hfs+' in [fs.lower() for fs in fs_list]:
                 produce_dfxml(imagefile)
             else:
                 produce_dfxml(files_dir)
