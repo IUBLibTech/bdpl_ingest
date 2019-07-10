@@ -381,11 +381,9 @@ def TransferContent():
                             fs_list.append(fsname)
                             temp['start'] = mm[0].split()[2]
                             temp['desc'] = fsname
-                            temp['slot'] mm[0].split()[1]
+                            temp['slot'] = mm[0].split()[1]
                             #now save this dictionary to our list of partition info
                             partition_info.append(temp)
-                #increase counter after completing line of mmls_info
-                part_no += 1
             
             #go through the list to identify which need to be handled by unhfs and which by tsk_recover
             if len(partition_info) > 0:
@@ -1019,7 +1017,7 @@ def write_html(header, path, file_delimiter, html):
     temp_dir = bdpl_vars()['temp_dir']
     
     """Write csv file to html table"""
-    in_file = open(path, 'r')
+    in_file = open(path, 'r', encoding="utf-8")
     # count lines and then return to start of file
     numline = len(in_file.readlines())
     in_file.seek(0)
@@ -1752,15 +1750,15 @@ def dir_tree(target):
     tree_ver = subprocess.check_output('tree --version', shell=True, text=True).split(' (')[0]
     tree_command = 'tree.exe -tDhR "%s" > "%s"' % (target, tree_dest)
     
+    timestamp = str(datetime.datetime.now())
+    exitcode = subprocess.call(tree_command, shell=True, text=True)
+
     #now make the newline characters more friendly for our colleagues who use Windows
     with open(tree_dest, 'r') as f:
         orig = f.read().splitlines()
     with open(tree_dest, 'w') as f:
         for line in orig:
             f.write('{}\r\n'.format(line))
-    
-    timestamp = str(datetime.datetime.now())
-    exitcode = subprocess.call(tree_command, shell=True, text=True)
 
     premis_list = pickleLoad('premis_list')
     premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, tree_command, 'Documented the organization and structure of content within a directory tree.', tree_ver))
