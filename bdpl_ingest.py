@@ -1589,7 +1589,12 @@ def produce_dfxml(target):
                 target = file_object.findtext("./filename")
                 size = file_object.findtext("./filesize")
                 checksum = file_object.findtext("./hashdigest[@type='md5']")
-                mtime = datetime.datetime.utcfromtimestamp(file_object.findtext("./mtime")).isoformat()
+                    if file_object.findtext("./mtime"):
+                        mtime = datetime.datetime.utcfromtimestamp(file_object.findtext("./mtime")).isoformat()
+                    elif file_object.findtext("./crtime"):
+                        mtime = datetime.datetime.utcfromtimestamp(file_object.findtext("./crtime")).isoformat()
+                    else:
+                        mtime = '-'
 
                 file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
                 file_stats.append(file_dict)
