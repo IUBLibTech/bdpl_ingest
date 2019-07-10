@@ -1211,21 +1211,22 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     with open(os.path.join(temp_dir, 'checksums.txt'), 'rb') as f:
         file_stats = pickle.load(f)
 
-    #next, create a new dictionary that IDs checksums that correspond to 1 or more files
-    stat_dict = {}
-    for dict in file_stats:
-        if int(dict['size']) > 0:
-            if dict['checksum'] in stat_dict:
-                stat_dict[dict['checksum']].append(dict['name'])
-            else:
-                stat_dict[dict['checksum']] = [dict['name']]
-   
-    #go through new dict and find checksums with duplicates
-    for chksm in [key for key, values in stat_dict.items() if len(values) > 1]:
-        for fname in stat_dict[chksm]:
-            temp = [item for item in file_stats if item['checksum'] == chksm and item['name'] == fname][0]
-            dup_list.append([temp['name'], temp['size'], temp['mtime'], temp['checksum']])
-    
+    #next, create a new dictionary that IDs checksums that correspond to 1 or more files. NOTE: the 'file_stats' list will be empty for DVDs, so we'll skip this step in that case
+    if len(file_stats) > 0:
+        stat_dict = {}
+        for dict in file_stats:
+            if int(dict['size']) > 0:
+                if dict['checksum'] in stat_dict:
+                    stat_dict[dict['checksum']].append(dict['name'])
+                else:
+                    stat_dict[dict['checksum']] = [dict['name']]
+       
+        #go through new dict and find checksums with duplicates
+        for chksm in [key for key, values in stat_dict.items() if len(values) > 1]:
+            for fname in stat_dict[chksm]:
+                temp = [item for item in file_stats if item['checksum'] == chksm and item['name'] == fname][0]
+                dup_list.append([temp['name'], temp['size'], temp['mtime'], temp['checksum']])
+        
     #save this duplicate file for later when we need to write to html
     with open(os.path.join(temp_dir, 'duplicates.txt'), 'wb') as f:
         pickle.dump(dup_list, f)
@@ -1577,27 +1578,29 @@ def produce_dfxml(target):
         
         dfxml_cmd = 'fiwalk-0.6.3 -x %s > %s' % (target, dfxml_output)
         exitcode = subprocess.call(dfxml_cmd, shell=True, text=True)
-        
-        #parse dfxml to get info for later...
-        tree = etree.parse(dfxml_output)
-        
-        file_objects = tree.xpath("//fileobject")
+                
+        #for jobs other than DVD, parse dfxml to get info for later...
         file_stats = []
-        
-        for file_object in file_objects:
-            if file_object.findtext("./name_type") == "r" and file_object.findtext("./alloc") == "1":
-                target = file_object.findtext("./filename")
-                size = file_object.findtext("./filesize")
-                checksum = file_object.findtext("./hashdigest[@type='md5']")
+        if jobType.get() != 'DVD':
+
+            tree = etree.parse(dfxml_output)
+            
+            file_objects = tree.xpath("//fileobject")
+            
+            for file_object in file_objects:
+                if file_object.findtext("./name_type") == "r" and file_object.findtext("./alloc") == "1":
+                    target = file_object.findtext("./filename")
+                    size = file_object.findtext("./filesize")
+                    checksum = file_object.findtext("./hashdigest[@type='md5']")
                     if file_object.findtext("./mtime"):
-                        mtime = datetime.datetime.utcfromtimestamp(file_object.findtext("./mtime")).isoformat()
+                        mtime = datetime.datetime.utcfromtimestamp(int(file_object.findtext("./mtime"))).isoformat()
                     elif file_object.findtext("./crtime"):
-                        mtime = datetime.datetime.utcfromtimestamp(file_object.findtext("./crtime")).isoformat()
+                        mtime = datetime.datetime.utcfromtimestamp(int(file_object.findtext("./crtime"))).isoformat()
                     else:
                         mtime = '-'
 
-                file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
-                file_stats.append(file_dict)
+                    file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
+                    file_stats.append(file_dict)
     
     #use custom operation if we have a copy operation    
     elif os.path.isdir(target):
