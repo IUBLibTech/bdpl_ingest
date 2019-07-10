@@ -376,13 +376,14 @@ def TransferContent():
             for mm in mmls_info:
                 for dt in dt_info:
                     if '{} sectors from {}'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt:
-                        fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
-                        fs_list.append(fsname)
-                        temp['part_id'] = str(part_no)
-                        temp['start'] = mm[0].split()[2]
-                        temp['desc'] = fsname
-                        #now save this dictionary to our list of partition info
-                        partition_info.append(temp)
+                        if 'file system' in dt:
+                            fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
+                            fs_list.append(fsname)
+                            temp['part_id'] = str(part_no)
+                            temp['start'] = mm[0].split()[2]
+                            temp['desc'] = fsname
+                            #now save this dictionary to our list of partition info
+                            partition_info.append(temp)
                 #increase counter after completing line of mmls_info
                 part_no += 1
             
