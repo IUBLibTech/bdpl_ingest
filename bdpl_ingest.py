@@ -329,15 +329,15 @@ def TransferContent():
         with open(disktype_output, 'r') as f:
             for line in f:
                 if 'file system' in line:
-                    fs_list.append(line.lstrip().split(' file system', 1)[0])
+                    fs_list.append(line.lstrip().split(' file system', 1)[0].lower())
         
         #save this list for later...
         pickleDump('fs_list', fs_list)
 
         #now parse output to get information on filesystems and (if present) partitions.  We will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
         secureCopy_list = ['udf', 'iso9660']
-        unhfs_list = ['osx', 'hfs', 'Apple', 'mfs']
-        tsk_list = ['ntfs', 'fat', 'exfat', 'ufs', 'ext', 'yaffs2']
+        unhfs_list = ['osx', 'hfs', 'apple', 'apple_hfs', 'mfs']
+        tsk_list = ['ntfs', 'fat', 'fat12', 'fat16', 'fat32', 'exfat', 'ex2', 'ex3', 'ext4', 'ufs', 'ufs1', 'ufs2', 'ext', 'yaffs2']
         
         #next, we need to see if there are any partitions on the image
         if os.stat(mmls_output).st_size == 0:
@@ -1751,6 +1751,13 @@ def dir_tree(target):
     tree_dest = os.path.join(reports_dir, 'tree.txt')
     tree_ver = subprocess.check_output('tree --version', shell=True, text=True).split(' (')[0]
     tree_command = 'tree.exe -tDhR "%s" > "%s"' % (target, tree_dest)
+    
+    #now make the newline characters more friendly for our colleagues who use Windows
+    with open(tree_dest, 'r') as f:
+        orig = f.read().splitlines()
+    with open(tree_dest, 'w') as f:
+        for line in orig:
+            f.write('{}\r\n'.format(line))
     
     timestamp = str(datetime.datetime.now())
     exitcode = subprocess.call(tree_command, shell=True, text=True)
