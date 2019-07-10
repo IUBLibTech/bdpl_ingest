@@ -372,35 +372,40 @@ def TransferContent():
             
             #loop through partition info; create a dictionary with partition number, sector offset, and file system name
             partition_info = []
-            part_no = 0
             for mm in mmls_info:
+                temp = {}
                 for dt in dt_info:
                     if '{} sectors from {}'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt:
                         if 'file system' in dt:
                             fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
                             fs_list.append(fsname)
-                            temp['part_id'] = str(part_no)
                             temp['start'] = mm[0].split()[2]
                             temp['desc'] = fsname
+                            temp['slot'] mm[0].split()[1]
                             #now save this dictionary to our list of partition info
                             partition_info.append(temp)
                 #increase counter after completing line of mmls_info
                 part_no += 1
             
             #go through the list to identify which need to be handled by unhfs and which by tsk_recover
-            for part_dict in partition_info:
+            if len(partition_info) > 0:
+                for part_dict in partition_info:
                 
-                if part_dict['desc'] in unhfs_list:
-                    outfolder = os.path.join(files_dir, 'partition_%s' % part_dict['part_id'].zfill(2))
-                    carvefiles('unhfs', imagefile, outfolder, unhfs_carve_ver, part_dict['part_id'])
-                                  
-                elif part_dict['desc'] in tsk_list: 
-                    part_no = str(int(part_dict['part_id']) + 1).zfill(2)
-                    outfolder = os.path.join(files_dir, 'partition_%s' % part_no)
-                    carvefiles('tsk_recover', imagefile, outfolder, tsk_carve_ver, part_dict['start'])
-                
-                else:
-                    print('\n\nFile system not recognized by tools')
+                    if len(partition_info) == 1:
+                        outfolder = files_dir
+                    else:
+                        outfolder = os.path.join(files_dir, 'partition_%s' % part_dict['slot'])
+                    
+                    if part_dict['desc'] in unhfs_list:
+                        carvefiles('unhfs', imagefile, outfolder, unhfs_carve_ver, part_dict['slot'])
+                                      
+                    elif part_dict['desc'] in tsk_list:
+                        carvefiles('tsk_recover', imagefile, outfolder, tsk_carve_ver, part_dict['start'])
+                    
+                    else:
+                        print('\n\nFile system not recognized by tools')
+            else:
+                print('\n\nNo files to be replicated.')
         
         #save file system list for later...
         pickleDump('fs_list', fs_list)
