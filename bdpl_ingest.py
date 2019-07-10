@@ -324,38 +324,37 @@ def TransferContent():
         unhfs_carve_ver = subprocess.check_output(cmd, shell=True, text=True).splitlines()[0]
         tsk_carve_ver = 'tsk_recover: %s ' % subprocess.check_output('tsk_recover -V').strip()
         
-        #see what kind of filesystems are present
-        fs_list = []
-        with open(disktype_output, 'r') as f:
-            for line in f:
-                if 'file system' in line:
-                    fs_list.append(line.lstrip().split(' file system', 1)[0].lower())
-        
-        #save this list for later...
-        pickleDump('fs_list', fs_list)
-
-        #now parse output to get information on filesystems and (if present) partitions.  We will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
+        #now get information on filesystems and (if present) partitions.  We will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
         secureCopy_list = ['udf', 'iso9660']
         unhfs_list = ['osx', 'hfs', 'apple', 'apple_hfs', 'mfs']
-        tsk_list = ['ntfs', 'fat', 'fat12', 'fat16', 'fat32', 'exfat', 'ex2', 'ex3', 'ext4', 'ufs', 'ufs1', 'ufs2', 'ext', 'yaffs2']
+        tsk_list = ['ntfs', 'fat', 'fat12', 'fat16', 'fat32', 'exfat', 'ext2', 'ext3', 'ext4', 'ufs', 'ufs1', 'ufs2', 'ext', 'yaffs2']
+        fs_list = []
         
-        #next, we need to see if there are any partitions on the image
+        #get a list of disktype info
+        with open(disktype_output, 'r') as f:
+            dt_info = f.read().split('Partition ')
+        
+        #See if there are any partitions on the image
         if os.stat(mmls_output).st_size == 0:
             print('\n\nNo partitions recognized by mmls.')
             
-            #if any file systems have been found, copy or extract to /files/ directory
+            #see if known filesystems are present; if so, parse line to just pull out the identifying term
+            for dt in dt_info:
+                if 'file system' in dt:
+                    fs_list.append([d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower())
             
+            #if any file systems have been found, copy or extract to /files/ directory
             if len(fs_list) > 0:
                 
                 print('\n\nDisktype has identified the following file systems: ', ', '.join(fs_list))
                 
-                if any(fs.lower() in ' '.join(fs_list) for fs in secureCopy_list):
+                if any(fs in ' '.join(fs_list) for fs in secureCopy_list):
                     secureCopy(optical_drive_letter(), files_dir)
 
-                elif any(fs.lower() in ' '.join(fs_list) for fs in unhfs_list):
+                elif any(fs in ' '.join(fs_list) for fs in unhfs_list):
                     carvefiles('unhfs', imagefile, files_dir, unhfs_carve_ver, '')
                 
-                elif any(fs.lower() in ' '.join(fs_list) for fs in tsk_list): 
+                elif any(fs in ' '.join(fs_list) for fs in tsk_list): 
                     carvefiles('tsk_recover', imagefile, files_dir, tsk_carve_ver, '')
                 
                 else:
@@ -366,35 +365,44 @@ def TransferContent():
         
         #if we *do* have an mmls report, then pull our key data points out: slot, start, and description.  Create a dictionary for each partition and then save these to a list
         else:
+            print('\n\nOne or more partitions identified by mmls')
+            
+            with open(mmls_output, 'r') as f:
+                mmls_info = [m.split('\n') for m in f.read().splitlines()[5:]] 
+            
+            #loop through partition info; create a dictionary with partition number, sector offset, and file system name
             partition_info = []
             part_no = 0
-            with open(mmls_output, 'r') as f:
-                print('\n\nOne or more partitions identified by mmls')
-                
-                #skip the first 4 mmls header lines
-                for line in f.readlines()[5:]:
-                    temp = {}
-                    #only read those lines that have numerical 'slot' info
-                    if any(s.isdigit() for s in re.split(r'\s\s+', line.rstrip())[1]):
+            for mm in mmls_info:
+                for dt in dt_info:
+                    if '{} sectors from {}'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt:
+                        fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
+                        fs_list.append(fsname)
                         temp['part_id'] = str(part_no)
-                        temp['start'] = re.split(r'\s\s+', line.rstrip())[2]
-                        temp['desc'] = re.split(r'\s\s+', line.rstrip())[5]
-                        part_no += 1
+                        temp['start'] = mm[0].split()[2]
+                        temp['desc'] = fsname
                         #now save this dictionary to our list of partition info
                         partition_info.append(temp)
+                #increase counter after completing line of mmls_info
+                part_no += 1
             
             #go through the list to identify which need to be handled by unhfs and which by tsk_recover
-            
             for part_dict in partition_info:
                 
-                if any(fs.lower() in part_dict['desc'] for fs in unhfs_list):
-                    carvefiles('unhfs', imagefile, files_dir, unhfs_carve_ver, part_dict)
+                if part_dict['desc'] in unhfs_list:
+                    outfolder = os.path.join(files_dir, 'partition_%s' % part_dict['part_id'].zfill(2))
+                    carvefiles('unhfs', imagefile, outfolder, unhfs_carve_ver, part_dict['part_id'])
                                   
-                elif any(fs.lower() in part_dict['desc'] for fs in tsk_list): 
-                    carvefiles('tsk_recover', imagefile, files_dir, tsk_carve_ver, part_dict)
+                elif part_dict['desc'] in tsk_list: 
+                    part_no = str(int(part_dict['part_id']) + 1).zfill(2)
+                    outfolder = os.path.join(files_dir, 'partition_%s' % part_no)
+                    carvefiles('tsk_recover', imagefile, outfolder, tsk_carve_ver, part_dict['start'])
                 
                 else:
                     print('\n\nFile system not recognized by tools')
+        
+        #save file system list for later...
+        pickleDump('fs_list', fs_list)
         
         print('\n\nFILE REPLICATION COMPLETED; PROCEED TO NEXT STEP')
             
@@ -615,39 +623,25 @@ def unhfs_func(start, out, imagefile):
     
     subprocess.call(cmd, shell=True)
 
-def carvefiles(tool, imagefile, files_dir, carve_ver, part_dict):
-    #set commands based on tool type and if there are partitions (will include partition dictionary if so)
+def carvefiles(tool, imagefile, outfolder, carve_ver, partition): 
     
-    #set default variable; this will be reset if there are multiple partitions
-    outfolder = files_dir
+    if not os.path.exists(outfolder):
+        os.makedirs(outfolder)
     
     if tool == 'unhfs':
         
-        if part_dict == '':
-            carve_cmd = 'unhfs -sfm-substitutions -resforks APPLEDOUBLE -o "%s" "%s" 2>nul' % (files_dir, imagefile)
+        if partition == '':
+            carve_cmd = 'unhfs -sfm-substitutions -resforks APPLEDOUBLE -o "%s" "%s" 2>nul' % (outfolder, imagefile)
         else:
-            #create a new destination folder for each partition
-            outfolder = os.path.join(files_dir, 'partition_%s' % part_dict['part_id'].zfill(2))
-            if not os.path.exists(outfolder):
-                os.makedirs(outfolder)
-            
-            #indicate the partition # (starting from 0) for each
-            carve_cmd = 'unhfs -sfm-substitutions -partition %s -resforks APPLEDOUBLE -o "%s" "%s" 2>nul' % (part_dict['part_id'], outfolder, imagefile)
+            carve_cmd = 'unhfs -sfm-substitutions -partition %s -resforks APPLEDOUBLE -o "%s" "%s" 2>nul' % (partition, outfolder, imagefile)
     
     else:
         
-        if part_dict == '':
-            carve_cmd = 'tsk_recover -a %s %s' % (imagefile, files_dir)
+        if partition == '':
+            carve_cmd = 'tsk_recover -a %s %s' % (imagefile, outfolder)
         
         else:
-            #create a new destination folder for each partition
-            part_no = str(int(part_dict['part_id']) + 1).zfill(2)
-            outfolder = os.path.join(files_dir, 'partition_%s' % part_no)
-            if not os.path.exists(outfolder):
-                os.makedirs(outfolder)
-            
-            #indicate the sector offset for each partition
-            carve_cmd = 'tsk_recover -a -o %s %s %s' % (part_dict['start'], imagefile, outfolder)
+            carve_cmd = 'tsk_recover -a -o %s %s %s' % (partition, imagefile, outfolder)
         
     print('\n\n\tTOOL: %s\n\tSOURCE: %s \n\tDESTINATION: %s\n' % (tool, outfolder, imagefile))
     
