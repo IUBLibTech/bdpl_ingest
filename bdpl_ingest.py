@@ -129,9 +129,11 @@ def secureCopy(file_source, file_destination):
     timestamp = str(datetime.datetime.now())             
     migrate_ver = "TeraCopy v3.26"
     
-    #set variables for copy operation 
-    
-    copycmd = 'TERACOPY COPY "%s" %s /SkipAll /CLOSE' % (file_source, file_destination)
+    #set variables for copy operation; note that if we are using a file list, TERACOPY requires a '*' before the source. 
+    if os.path.isfile(file_source):
+        copycmd = 'TERACOPY COPY *"%s" %s /SkipAll /CLOSE' % (file_source, file_destination)
+    else:
+        copycmd = 'TERACOPY COPY "%s" %s /SkipAll /CLOSE' % (file_source, file_destination)
     
     try:
         exitcode = subprocess.call(copycmd, shell=True, text=True)
@@ -263,6 +265,13 @@ def TransferContent():
         
         teracopy_source = source.get().replace('/', '\\')
         
+        if 'bdpl_transfer_lists' in teracopy_source:
+            teracopy_source = glob.glob(os.path.join('Z:\\', '%s.txt' % barcode.get()))
+            if len(teracopy_source) != 1:
+                print('\n\nOperation failed: could not find transfer list for this barcode. Please verify the list and try again.')
+                return
+            else: teracopy_source = teracopy_source[0]
+            
         secureCopy(teracopy_source, files_dir)
         
         print('\n\nFILE REPLICATION COMPLETED; PROCEED TO NEXT STEP')
@@ -2552,7 +2561,7 @@ def main():
     #Get path to source, if needed
     source = StringVar()
     source.set('')
-    sourceTxt = Label(midMiddle, text='Source (copy only): ')
+    sourceTxt = Label(midMiddle, text='Source / file list\n("COPY" only): ')
     sourceTxt.pack(in_=midMiddle, side=LEFT, padx=5, pady=5)
     sourceEntry = Entry(midMiddle, width=55, textvariable=source)
     sourceEntry.pack(in_=midMiddle, side=LEFT, padx=5, pady=5)
@@ -2743,7 +2752,7 @@ def newscreen():
         print('Missing ASCII art header file; download to: %s' % fname)
         
 def spreadsheet_browse():
-    currdir = "Z:\\spreadsheets"
+    currdir = "Z:\\"
     selected_file = tkinter.filedialog.askopenfilename(parent=window, initialdir=currdir, title='Please select your inventory spreadsheet')
     if len(selected_file) > 0:
         spreadsheet.set(selected_file)

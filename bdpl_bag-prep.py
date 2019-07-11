@@ -156,7 +156,7 @@ def main():
     destination = 'Y:/Archiver_spool/general%2fmediaimages'
     
     #open master workbook and get ready to write
-    master_spreadsheet = 'Y:/bdpl_master_spreadsheet.xlsx'
+    master_spreadsheet = 'Y:/spreadsheets/bdpl_master_spreadsheet.xlsx'
     master_wb = openpyxl.load_workbook(master_spreadsheet)
     item_ws = master_wb['Item']
     cumulative_ws = master_wb['Cumulative']
