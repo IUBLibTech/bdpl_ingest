@@ -2385,7 +2385,7 @@ def check_progress():
     except KeyError:
         print('\n\nCheck %s; make sure "Inventory" worksheet has not been renamed.  Consult with Digital Preservation Librarian if sheet does not exist.')
         return    
-    current_total = (ws2.max_row - 1) - (ws.max_row - 1)
+    
     
     print('\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total))
     
@@ -2401,12 +2401,14 @@ def check_progress():
         if not col.value is None:
             list2.append(str(col.value))
     
+    current_total = len(list2) - len(list1)
+    
     items_not_done = list(set(list2) - set(list1))
     
     print('\n\nThe following barcodes require ingest:\n%s' % '\n'.join(items_not_done))
     
     if len(items_not_done) > 0:
-        print('\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total))
+        print('\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % (len(list1), len(list2), current_total))
     else:
         print('\n\nAll items completed.')
 
