@@ -2387,7 +2387,7 @@ def check_progress():
         return    
     
     
-    print('\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total))
+    print('\n\nCurrent status: %s out of %s items have been ingested. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total))
     
     #get list of all barcodes on appraisal spreadsheet
     list1 = []
@@ -2405,12 +2405,9 @@ def check_progress():
     
     items_not_done = list(set(list2) - set(list1))
     
-    print('\n\nThe following barcodes require ingest:\n%s' % '\n'.join(items_not_done))
-    
     if len(items_not_done) > 0:
-        print('\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % (len(list1), len(list2), current_total))
-    else:
-        print('\n\nAll items completed.')
+        print('\n\nThe following barcodes require ingest:\n%s' % '\n'.join(items_not_done))
+
 
 def move_media_images():
     media_image_dir = bdpl_vars()['media_image_dir']
