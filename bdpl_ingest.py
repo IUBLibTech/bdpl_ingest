@@ -666,7 +666,7 @@ def carvefiles(tool, imagefile, outfolder, carve_ver, partition):
     pickleDump('premis_list', premis_list)
     
     #if no files were extracted, remove partition folder.
-    if not checkFiles(outfolder):
+    if not checkFiles(outfolder) and outfolder != bdpl_vars()['files_dir']:
         os.rmdir(outfolder)
     
     #if tsk_recover has been run, go through and fix the file MAC times
@@ -2346,8 +2346,6 @@ def verify_barcode():
     return True
     
 def check_unfinished():
-    ship_dir = bdpl_vars()['ship_dir']
-    
     if unit.get() == '':
         print('\n\nEnter a unit ID and try again.')
         return
@@ -2356,8 +2354,10 @@ def check_unfinished():
         print('\n\nEnter a shipment ID and try again.')
         return
         
-    for item_barcode in os.listdir(os.path.join(home_dir, unit.get())):
-        if os.path.isdir(os.path.join(home_dir, unit.get(), item_barcode)):
+    ship_dir = bdpl_vars()['ship_dir']
+        
+    for item_barcode in os.listdir(ship_dir):
+        if os.path.isdir(os.path.join(ship_dir, item_barcode)):
             if os.path.exists(bdpl_vars()['temp_dir']):
                 premis_list = pickleLoad('premis_list')
                 if len(premis_list) == 0:
@@ -2389,20 +2389,26 @@ def check_progress():
     
     print('\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total))
     
+    #get list of all barcodes on appraisal spreadsheet
     list1 = []
     for col in ws['A'][1:]:
-        list1.append(str(col.value))
+        if not col.value is None:
+            list1.append(str(col.value))
     
+    #get list of all barcodes on inventory spreadsheet
     list2 = []
     for col in ws2['A'][1:]:
-        list2.append(str(col.value))
+        if not col.value is None:
+            list2.append(str(col.value))
     
-    items_not_done = set(list1 + list2)
+    items_not_done = list(set(list2) - set(list1))
     
-    print('\n\nThe following barcodes require ingest:\n%s' % '\n'.join(list(items_not_done)))
+    print('\n\nThe following barcodes require ingest:\n%s' % '\n'.join(items_not_done))
     
-    if len(list(items_not_done)) > 30:
+    if len(items_not_done) > 0:
         print('\n\nCurrent status: %s out of %s items have been transferred. \n\n%s remain.' % ((ws.max_row - 1), (ws2.max_row - 1), current_total))
+    else:
+        print('\n\nAll items completed.')
 
 def move_media_images():
     media_image_dir = bdpl_vars()['media_image_dir']
