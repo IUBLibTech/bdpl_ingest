@@ -99,6 +99,8 @@ def pickleLoad(list_name):
     temp_file = os.path.join(bdpl_vars()['temp_dir'], '%s.txt' % list_name)
     if list_name == "premis_list":
         temp_list = []
+    elif list_name == 'temp_dfxml':
+        temp_list = []
     else:
         temp_list = {}
     #make sure there's something in the file
@@ -1613,12 +1615,24 @@ def produce_dfxml(target):
     elif os.path.isdir(target):
         print('\n\nDIGITAL FORENSICS XML CREATION: bdpl_ingest')
         
+        temp_dfxml = os.path.join(temp_dir, 'temp_dfxml.txt')
+        
         timestamp = str(datetime.datetime.now().isoformat())
         
-        file_stats = []
+        #this will create an empty list or, if we've previously crashed or been stopped, will load any info previously stored
+        file_stats = pickleLoad('temp_dfxml')
 
         for root, dirnames, filenames in os.walk(target):
+            #sort our filenames so we always work in the same order
+            filenames.sort()
+            counter = 0
             for file in filenames:
+                
+                #check to make sure that we haven't already added info for this file
+                if len(file_stats) > 0:
+                    if counter <= file_stats[-1]['counter']:
+                        continue
+                
                 target = os.path.join(root, file)
                 size = os.path.getsize(target)
                 mtime = datetime.datetime.fromtimestamp(os.path.getmtime(target)).isoformat()[:-7]
@@ -1626,9 +1640,14 @@ def produce_dfxml(target):
                 atime = datetime.datetime.fromtimestamp(os.path.getatime(target)).isoformat()[:-7]
                 checksum = md5(target)
                 
-                file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'ctime' : ctime, 'atime' : atime, 'checksum' : checksum}
+                file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'ctime' : ctime, 'atime' : atime, 'checksum' : checksum, 'counter' : counter}
                 
                 file_stats.append(file_dict)
+                
+                #save this list to file just in case we crash...
+                pickleDump('temp_dfxml', file_stats)
+                
+                counter += 1
         
         dc_namespace = 'http://purl.org/dc/elements/1.1/'
         dc = "{%s}" % dc_namespace

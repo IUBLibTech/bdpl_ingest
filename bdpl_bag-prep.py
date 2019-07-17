@@ -1020,6 +1020,9 @@ def main():
     wb.save(spreadsheet)
     master_wb.save(master_spreadsheet)
     
+    #save a copy of the master spreadsheet to SDA
+    shutil.copy(master_spreadsheet, destination)
+    
 
 if __name__ == '__main__':
     
