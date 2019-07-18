@@ -1055,7 +1055,7 @@ def write_html(header, path, file_delimiter, html):
                         # write data
                         html.write('\n<tr>')
                         for column in row:
-                            html.write('\n<td>' + column + '</td>')
+                            html.write('\n<td>' + str(column) + '</td>')
                         html.write('\n</tr>')
                 html.write('\n</tbody>')
                 html.write('\n</table>')
