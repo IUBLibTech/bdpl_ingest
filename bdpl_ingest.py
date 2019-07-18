@@ -1058,15 +1058,15 @@ def write_html(header, path, file_delimiter, html):
                 html.write('\n</tbody>')
                 html.write('\n</table>')
         
-        #save a copy of the duplicates for the reports
-        reports_dir = bdpl_vars()['reports_dir']
-        dup_report = os.path.join(reports_dir, 'duplicates.csv')
-        with open(dup_report, "w", newline="") as f:
-            writer = csv.writer(f)
-            dup_header = ['Filename', 'Filesize', 'Date modified', 'Checksum']
-            writer.writerow(dup_header)
-            for item in dup_list:
-                writer.writerow(item)
+            #save a copy of the duplicates for the reports
+            reports_dir = bdpl_vars()['reports_dir']
+            dup_report = os.path.join(reports_dir, 'duplicates.csv')
+            with open(dup_report, "w", newline="") as f:
+                writer = csv.writer(f)
+                dup_header = ['Filename', 'Filesize', 'Date modified', 'Checksum']
+                writer.writerow(dup_header)
+                for item in dup_list:
+                    writer.writerow(item)
         
         else:
             html.write('\nNone found.\n<br><br>')
