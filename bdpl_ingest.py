@@ -761,12 +761,11 @@ def fix_dates(files_dir, dfxml_output):
 
 def run_antivirus(files_dir, log_dir, metadata):
     
-    print('\n\nVIRUS SCAN: MpCmdRun.exe\n\n')
-    
     #return if virus scan already run
     if check_premis('virus check', 'eventType'):
-        print('\n\nVirus scan already completed.')
         return
+    
+    print('\n\nVIRUS SCAN: MpCmdRun.exe\n\n')
     
     virus_log = os.path.join(log_dir, 'viruscheck-log.txt')
     
@@ -874,7 +873,7 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
 
 def run_siegfried(files_dir, reports_dir, siegfried_version):
 
-    print('\n\nFILE FORMAT IDENTIFICATION: SIEGFRIED')
+    print('\nFile format identification with siegfried...')
     """Run siegfried on directory"""  
     sf_file = os.path.join(reports_dir, 'siegfried.csv')
     sf_command = 'sf -z -csv "%s" > "%s"' % (files_dir, sf_file)
@@ -894,6 +893,8 @@ def run_siegfried(files_dir, reports_dir, siegfried_version):
     pickleDump('premis_list', premis_list)
 
 def import_csv(cursor, conn, reports_dir):
+
+    print('\nImporting siegried file to sqlite3 database...')
     """Import csv file into sqlite db"""
     sf_file = os.path.join(reports_dir, 'siegfried.csv')
     
@@ -925,6 +926,8 @@ def import_csv(cursor, conn, reports_dir):
 
 def generate_reports(cursor, html, reports_dir):
     temp_dir = bdpl_vars()['temp_dir']
+    
+    print('\nGenerating format reports and writing html...')
     
     """Run sql queries on db to generate reports, write to csv and html"""
     full_header = ['Filename', 'Filesize', 'Date modified', 'Errors', 
@@ -1046,7 +1049,6 @@ def write_html(header, path, file_delimiter, html):
                 html.write('<th>Checksum</th>')
                 html.write('\n</tr>')
                 html.write('\n</thead>')
-                in_file.seek(0) # back to beginning of file
                 html.write('\n<tbody>')
                 for row in dup_list:
                     if row[3] == '%s' % hash_value:
@@ -1206,6 +1208,8 @@ def close_files_conns_on_exit(html, conn, cursor):
 
 def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_dir, log_dir):
     """Get aggregate statistics and write to html report"""
+    
+    print('\nGetting statistics about content...')
     
     # get stats from sqlite db
     cursor.execute("SELECT COUNT(*) from siegfried;") # total files
@@ -1770,18 +1774,17 @@ def disk_image_info(imagefile, reports_dir):
     pickleDump('premis_list', premis_list)
 
 def dir_tree(target):
-    
-    print('\n\nDOCUMENTING FOLDER/FILE STRUCTURE: TREE')
-    
+        
     #make a directory tree to document original structure
     reports_dir = bdpl_vars()['reports_dir']
     tree_dest = os.path.join(reports_dir, 'tree.txt')
     
     #quit microservice if already run
-    if os.path.exists(tree_dest):
-        print('\Directory tree already created.')
+    if os.path.exists(tree_dest): 
         return
         
+    print('\n\nDOCUMENTING FOLDER/FILE STRUCTURE: TREE')
+    
     tree_ver = subprocess.check_output('tree --version', shell=True, text=True).split(' (')[0]
     tree_command = 'tree.exe -tDhR "%s" > "%s"' % (target, tree_dest)
     
@@ -1800,6 +1803,8 @@ def dir_tree(target):
     pickleDump('premis_list', premis_list)
 
 def format_analysis(files_dir, reports_dir, log_dir, metadata, html):
+    
+    print('\n\nFILE FORMAT ANALYSIS')
     
     siegfried_db = os.path.join(metadata, 'siegfried.sqlite')
     conn = sqlite3.connect(siegfried_db)
