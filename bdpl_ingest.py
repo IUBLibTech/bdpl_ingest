@@ -1240,7 +1240,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
                 dup_list.append([temp['name'], temp['size'], temp['mtime'], temp['checksum']])
         
     #save this duplicate file for later when we need to write to html
-    pickleDump(dup_list, 'duplicates')
+    pickleDump('duplicates', dup_list)
     
     #total duplicates = total length of duplicate list
     all_dupes = len(dup_list)
