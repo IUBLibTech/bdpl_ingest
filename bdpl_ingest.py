@@ -1773,10 +1773,15 @@ def dir_tree(target):
     
     print('\n\nDOCUMENTING FOLDER/FILE STRUCTURE: TREE')
     
-    reports_dir = bdpl_vars()['reports_dir']
-    
     #make a directory tree to document original structure
+    reports_dir = bdpl_vars()['reports_dir']
     tree_dest = os.path.join(reports_dir, 'tree.txt')
+    
+    #quit microservice if already run
+    if os.path.exists(tree_dest):
+        print('\Directory tree already created.')
+        return
+        
     tree_ver = subprocess.check_output('tree --version', shell=True, text=True).split(' (')[0]
     tree_command = 'tree.exe -tDhR "%s" > "%s"' % (target, tree_dest)
     
