@@ -101,6 +101,8 @@ def pickleLoad(list_name):
         temp_list = []
     elif list_name == 'temp_dfxml':
         temp_list = []
+    elif list_name == 'duplicates':
+        temp_list = []
     else:
         temp_list = {}
     #make sure there's something in the file
@@ -969,23 +971,11 @@ def generate_reports(cursor, html, reports_dir):
     sqlite_to_csv(sql, path, full_header, cursor)
     write_html('Errors', path, ',', html)
     
-    # duplicates report 
+    # duplicates report: just use our pickled list 
   
-    #retrieve our 'duplicates' file
-    dup_list = []
-    with open(os.path.join(temp_dir, 'duplicates.txt'), 'rb') as f:
-        dup_list = pickle.load(f)
-    
-    #write info to our CSV file
-    path = os.path.join(reports_dir, 'duplicates.csv')
-    with open(path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        dup_header = ['Filename', 'Filesize', 'Date modified', 'Checksum']
-        writer.writerow(dup_header)
-        for item in dup_list:
-            writer.writerow(item)
-
-    write_html('Duplicates', path, ',', html)
+    #retrieve our 'duplicates' file; just use our pickled list instead of CSV
+    dup_list = pickleLoad('duplicates')
+    write_html('Duplicates', dup_list, ',', html)
     
 def sqlite_to_csv(sql, path, header, cursor):
     """Write sql query result to csv"""
@@ -1025,94 +1015,26 @@ def write_pronom_links(old_file, new_file):
     out_file.close()
 
 def write_html(header, path, file_delimiter, html):
-    temp_dir = bdpl_vars()['temp_dir']
-    
     """Write csv file to html table"""
-    in_file = open(path, 'r', encoding="utf-8")
-    # count lines and then return to start of file
-    numline = len(in_file.readlines())
-    in_file.seek(0)
-
-    #open csv reader
-    r = csv.reader(in_file, delimiter="%s" % file_delimiter)
-
+    
     # write header
     html.write('\n<a name="%s" style="padding-top: 40px;"></a>' % header)
     html.write('\n<h4>%s</h4>' % header)
+    
     if header == 'Duplicates':
         html.write('\n<p><em>Duplicates are grouped by hash value.</em></p>')
-    elif header == 'Personally Identifiable Information (PII)':
-        html.write('\n<p><em>Potential PII in source, as identified by bulk_extractor.</em></p>')
-    
-    # if writing PII, handle separately
-    pii_list = []
-    if header == 'Personally Identifiable Information (PII)':
         
-        appraisal_dict = pickleLoad('appraisal_dict')
+        dup_list = path
         
-        #check that there are any PII results
-        if os.stat(path).st_size > 0:
-            html.write('\n<table class="table table-sm table-responsive table-hover">')
-            html.write('\n<thead>')
-            html.write('\n<tr>')
-            html.write('\n<th>PII type</th>')
-            html.write('\n<th># of matches (may be false)</th>')
-            html.write('\n<th>More information (if available)</th>')
-            html.write('\n</tr>')
-            html.write('\n</thead>')
-            html.write('\n<tbody>')
-            with open(path, 'r') as pii_info:
-                for line in pii_info:
-                    html.write('\n<tr>')
-                    if 'pii.txt' in line:
-                        # write data
-                        html.write('\n<td>SSNs, Account Nos., Birth Dates, etc.</td>')
-                        html.write('\n<td>' + line.split()[1] + '</td>')
-                        html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars()['bulkext_dir'])
-                        pii_list.append('ACCOUNT NOs')
-                    if 'ccn.txt' in line:
-                        html.write('\n<td>Credit Card Nos.</td>')
-                        html.write('\n<td>' + line.split()[1] + '</td>')
-                        html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars()['bulkext_dir'])
-                        pii_list.append('CCNs')
-                    if 'email.txt' in line:
-                        html.write('\n<td>Email address domains (may include 3rd party information)</td>')
-                        html.write('\n<td>' + line.split()[1] + '</td>')
-                        html.write('\n<td>See: <a href="./email_domain_histogram.txt">Email domain histogram</a></td>')
-                        pii_list.append('EMAIL')
-                    if 'telephone.txt' in line:
-                        html.write('\n<td>Telephone numbers (may include 3rd party information)</td>')
-                        html.write('\n<td>' + line.split()[1] + '</td>')
-                        html.write('\n<td>See: <a href="./telephone_histogram.txt">Telephone # histogram</a></td>')
-                        pii_list.append('TELEPHONE NOs')
-                    if 'find.txt' in line:
-                        html.write('\n<td>Sensitive terms and phrases</td>')
-                        html.write('\n<td>' + line.split()[1] + '</td>')
-                        html.write('\n<td>See: <a href="./find_histogram.txt">Keyword histogram</a></td>')
-                        pii_list.append('pre-defined words or phrases')
-                    html.write('\n</tr>')   
-            html.write('\n</tbody>')
-            html.write('\n</table>')
-                
-            appraisal_dict['PII'] = 'Potential sensitive information identified: %s.' % ', '.join(pii_list)
-    
-        else:
-            html.write('\nNone found.')
-            appraisal_dict['PII'] = '-'
+        numline = len(dup_list)
         
-        pickleDump('appraisal_dict', appraisal_dict)
-
-    # if writing duplicates, handle separately
-    elif header == 'Duplicates':
         if numline > 1: #aka more rows than just header
             # read md5s from csv and write to list
             hash_list = []
-            for row in r:
-                if row:
-                    hash_list.append(row[3])
+            for row in dup_list:
+                hash_list.append(row[3])
             # deduplicate md5_list
             hash_list = list(OrderedDict.fromkeys(hash_list))
-            hash_list.remove('Checksum')
             # for each hash in md5_list, print header, file info, and list of matching files
             for hash_value in hash_list:
                 html.write('\n<p>Files matching checksum <strong>%s</strong>:</p>' % hash_value)
@@ -1126,7 +1048,7 @@ def write_html(header, path, file_delimiter, html):
                 html.write('\n</thead>')
                 in_file.seek(0) # back to beginning of file
                 html.write('\n<tbody>')
-                for row in r:
+                for row in dup_list:
                     if row[3] == '%s' % hash_value:
                         # write data
                         html.write('\n<tr>')
@@ -1135,40 +1057,121 @@ def write_html(header, path, file_delimiter, html):
                         html.write('\n</tr>')
                 html.write('\n</tbody>')
                 html.write('\n</table>')
+        
+        #save a copy of the duplicates for the reports
+        reports_dir = bdpl_vars()['reports_dir']
+        dup_report = os.path.join(reports_dir, 'duplicates.csv')
+        with open(dup_report, "w", newline="") as f:
+            writer = csv.writer(f)
+            dup_header = ['Filename', 'Filesize', 'Date modified', 'Checksum']
+            writer.writerow(dup_header)
+            for item in dup_list:
+                writer.writerow(item)
+        
         else:
             html.write('\nNone found.\n<br><br>')
-
-    # otherwise write as normal
-    else:
-        if numline > 1: #aka more rows than just header
-            # add borders to table for full-width tables only
-            full_width_table_headers = ['Unidentified', 'Errors']
-            if header in full_width_table_headers:
-                html.write('\n<table class="table table-sm table-responsive table-bordered table-hover">')
-            else:
-                html.write('\n<table class="table table-sm table-responsive table-hover">')
-            # write header row
-            html.write('\n<thead>')
-            html.write('\n<tr>')
-            row1 = next(r)
-            for column in row1:
-                html.write('\n<th>' + column + '</th>')
-            html.write('\n</tr>')
-            html.write('\n</thead>')
-            # write data rows
-            html.write('\n<tbody>')
-            for row in r:
-                # write data
-                html.write('\n<tr>')
-                for column in row:
-                    html.write('\n<td>' + column + '</td>')
-                html.write('\n</tr>')
-            html.write('\n</tbody>')
-            html.write('\n</table>')
-        else:
-            html.write('\nNone found.\n<br><br>')
+        
     
-    in_file.close()
+    else:
+        in_file = open(path, 'r', encoding="utf-8")
+        # count lines and then return to start of file
+        numline = len(in_file.readlines())
+        in_file.seek(0)
+
+        #open csv reader
+        r = csv.reader(in_file, delimiter="%s" % file_delimiter)
+        
+        # if writing PII, handle separately
+        if header == 'Personally Identifiable Information (PII)':
+            html.write('\n<p><em>Potential PII in source, as identified by bulk_extractor.</em></p>')
+            
+            pii_list = []
+        
+            appraisal_dict = pickleLoad('appraisal_dict')
+            
+            #check that there are any PII results
+            if os.stat(path).st_size > 0:
+                html.write('\n<table class="table table-sm table-responsive table-hover">')
+                html.write('\n<thead>')
+                html.write('\n<tr>')
+                html.write('\n<th>PII type</th>')
+                html.write('\n<th># of matches (may be false)</th>')
+                html.write('\n<th>More information (if available)</th>')
+                html.write('\n</tr>')
+                html.write('\n</thead>')
+                html.write('\n<tbody>')
+                with open(path, 'r') as pii_info:
+                    for line in pii_info:
+                        html.write('\n<tr>')
+                        if 'pii.txt' in line:
+                            # write data
+                            html.write('\n<td>SSNs, Account Nos., Birth Dates, etc.</td>')
+                            html.write('\n<td>' + line.split()[1] + '</td>')
+                            html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars()['bulkext_dir'])
+                            pii_list.append('ACCOUNT NOs')
+                        if 'ccn.txt' in line:
+                            html.write('\n<td>Credit Card Nos.</td>')
+                            html.write('\n<td>' + line.split()[1] + '</td>')
+                            html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % bdpl_vars()['bulkext_dir'])
+                            pii_list.append('CCNs')
+                        if 'email.txt' in line:
+                            html.write('\n<td>Email address domains (may include 3rd party information)</td>')
+                            html.write('\n<td>' + line.split()[1] + '</td>')
+                            html.write('\n<td>See: <a href="./email_domain_histogram.txt">Email domain histogram</a></td>')
+                            pii_list.append('EMAIL')
+                        if 'telephone.txt' in line:
+                            html.write('\n<td>Telephone numbers (may include 3rd party information)</td>')
+                            html.write('\n<td>' + line.split()[1] + '</td>')
+                            html.write('\n<td>See: <a href="./telephone_histogram.txt">Telephone # histogram</a></td>')
+                            pii_list.append('TELEPHONE NOs')
+                        if 'find.txt' in line:
+                            html.write('\n<td>Sensitive terms and phrases</td>')
+                            html.write('\n<td>' + line.split()[1] + '</td>')
+                            html.write('\n<td>See: <a href="./find_histogram.txt">Keyword histogram</a></td>')
+                            pii_list.append('pre-defined words or phrases')
+                        html.write('\n</tr>')   
+                html.write('\n</tbody>')
+                html.write('\n</table>')
+                    
+                appraisal_dict['PII'] = 'Potential sensitive information identified: %s.' % ', '.join(pii_list)
+        
+            else:
+                html.write('\nNone found.')
+                appraisal_dict['PII'] = '-'
+            
+            pickleDump('appraisal_dict', appraisal_dict)
+
+        # otherwise write as normal
+        else:
+            if numline > 1: #aka more rows than just header
+                # add borders to table for full-width tables only
+                full_width_table_headers = ['Unidentified', 'Errors']
+                if header in full_width_table_headers:
+                    html.write('\n<table class="table table-sm table-responsive table-bordered table-hover">')
+                else:
+                    html.write('\n<table class="table table-sm table-responsive table-hover">')
+                # write header row
+                html.write('\n<thead>')
+                html.write('\n<tr>')
+                row1 = next(r)
+                for column in row1:
+                    html.write('\n<th>' + column + '</th>')
+                html.write('\n</tr>')
+                html.write('\n</thead>')
+                # write data rows
+                html.write('\n<tbody>')
+                for row in r:
+                    # write data
+                    html.write('\n<tr>')
+                    for column in row:
+                        html.write('\n<td>' + column + '</td>')
+                    html.write('\n</tr>')
+                html.write('\n</tbody>')
+                html.write('\n</table>')
+            else:
+                html.write('\nNone found.\n<br><br>')
+    
+        in_file.close()
     
 def convert_size(size):
     # convert size to human-readable form
@@ -1237,8 +1240,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
                 dup_list.append([temp['name'], temp['size'], temp['mtime'], temp['checksum']])
         
     #save this duplicate file for later when we need to write to html
-    with open(os.path.join(temp_dir, 'duplicates.txt'), 'wb') as f:
-        pickle.dump(dup_list, f)
+    pickleDump(dup_list, 'duplicates')
     
     #total duplicates = total length of duplicate list
     all_dupes = len(dup_list)
@@ -1635,8 +1637,8 @@ def produce_dfxml(target):
                 
                 target = os.path.join(root, file)
                 size = os.path.getsize(target)
-                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(target)).isoformat()[:-7]
-                ctime = datetime.datetime.fromtimestamp(os.path.getctime(target)).isoformat()[:-7]
+                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(target)).isoformat()
+                ctime = datetime.datetime.fromtimestamp(os.path.getctime(target)).isoformat()
                 atime = datetime.datetime.fromtimestamp(os.path.getatime(target)).isoformat()[:-7]
                 checksum = md5(target)
                 
