@@ -784,28 +784,34 @@ def run_antivirus(files_dir, log_dir, metadata):
     subprocess.call('TYPE %s >> %s' % (win_log, virus_log), shell=True, text=True)
     
     #Get Antivirus signature, definition, etc.; find file with information, convert to ASCII and get most recent 'version' info
-    defender_path = "C:\\ProgramData\\Microsoft\\Windows Defender\\Support"
-    find_file = fnmatch.filter(os.listdir(defender_path), 'MPDetection-*.log')
-    defender_unicode = os.path.join(defender_path, find_file[0])
-    defender_ascii = os.path.join(metadata, find_file[0])
-    exitcode = subprocess.call('TYPE "%s" > %s' % (defender_unicode, defender_ascii), shell=True, text=True)
+    cmd = 'powershell "Get-MpComputerStatus"'
     
-    for line in reversed(open(defender_ascii).readlines()):
-        if "Version: " in line:
-            av_ver = "Windows Defender MpCmdRun.exe. " + line
-            av_ver = av_ver.rstrip()
-            break
+    av_out = subprocess.check_output(cmd, shell=True, text=True).splitlines()
     
-    os.remove(defender_ascii)
+    for line in av_out:
+        if 'AMProductVersion' in line:
+            _product = line.split(': ')[1]
+        if 'AMServiceVersion' in line:
+            _service = line.split(': ')[1]
+        if 'AMEngineVersion' in line:
+            _engine = line.split(': ')[1]
+        if 'AntispywareSignatureVersion' in line:
+            _as = line.split(': ')[1]
+        if 'AntivirusSignatureVersion' in line:
+            _av = line.split(': ')[1]
+            
+    av_ver = 'Windows Defender MpCmdRun.exe Product %s Service %s Engine %s AS %s AV %s' % (_product, _service, _engine, _as, _av)
+    
     
     #write info to appraisal_dict
     appraisal_dict = pickleLoad('appraisal_dict')
         
-    if "found no threats" not in open(virus_log).read():
-        appraisal_dict['Virus'] = 'WARNING! Virus or malware found; see %s.' % virus_log
+    with open(virus_log, 'r') as f:
+        if "found no threats" not in f.read():
+            appraisal_dict['Virus'] = 'WARNING! Virus or malware found; see %s.' % virus_log
         
-    else:
-        appraisal_dict['Virus'] = '-'
+        else:
+            appraisal_dict['Virus'] = '-'
 
         
     pickleDump('appraisal_dict', appraisal_dict)
