@@ -831,7 +831,7 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
             raise
 
     #use default command with buklk_extractor; individuak could implement changes to use 'find' scanner at a later date
-    bulkext_command = 'bulk_extractor -x aes -x base64 -x elf -x exif -x gps -x hiberfile -x httplogs -x json -x kml -x net -x pdf -x sqlite -x vcard -x winlnk -x winpe -x winprefetch -S ssn_mode=2 -o "%s" -R "%s" > "%s"' % (bulkext_dir, files_dir, bulkext_log)
+    bulkext_command = 'bulk_extractor -x aes -x base64 -x elf -x exif -x gps -x hiberfile -x httplogs -x json -x kml -x net -x pdf -x sqlite -x winlnk -x winpe -x winprefetch -S ssn_mode=2 -o "%s" -R "%s" > "%s"' % (bulkext_dir, files_dir, bulkext_log)
 
     #create timestamp
     timestamp = str(datetime.datetime.now())        
@@ -1627,11 +1627,12 @@ def produce_dfxml(target):
         
         #this will create an empty list or, if we've previously crashed or been stopped, will load any info previously stored
         file_stats = pickleLoad('temp_dfxml')
+        
+        counter = 0
 
         for root, dirnames, filenames in os.walk(target):
             #sort our filenames so we always work in the same order
             filenames.sort()
-            counter = 0
             for file in filenames:
                 
                 #check to make sure that we haven't already added info for this file
@@ -1978,12 +1979,15 @@ def analyzeContent():
     print('\n\n')
     
     #delete temp folder
-    shutil.rmtree(temp_dir)
+    try:
+        shutil.rmtree(temp_dir)
+    except (WindowsError, PermissionError) as e:
+        print('\n\nUnable to delete temp folder: %s' % e)
     
     #delete disk image folder if empty
     try:
         os.rmdir(image_dir)
-    except WindowsError:
+    except (WindowsError, PermissionError):
         pass
 
     # remove temp html file

@@ -715,7 +715,7 @@ def main():
                 print('\tCalculating SIP md5 checksum...')
                 SIP_md5 = md5(complete_sip)
                 
-                SIP_dict = {'size' : SIP_size, 'md5' : SIP_md5}
+                SIP_dict = {'size' : SIP_size, 'md5' : SIP_md5, 'filename' : tar_file}
                 
                 #store values in a file just in case we have a failure or are otherwise interrupted...
                 with open(os.path.join(report_dir, 'SIP_%s.txt' % barcode), 'wb') as file:
@@ -778,7 +778,7 @@ def main():
                         SIP_dict = pickle.load(file)
                 
                 #write information on the specfic barcode
-                rowlist = [barcode, unit, shipmentID, str(row[2].value), str(row[3].value), str(row[4].value), str(row[6].value), str(row[7].value), str(row[8].value), str(row[9].value), str(row[10].value), str(row[12].value), str(datetime.datetime.now()), extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5']]
+                rowlist = [barcode, unit, shipmentID, str(row[2].value), str(row[3].value), str(row[4].value), str(row[6].value), str(row[7].value), str(row[8].value), str(row[9].value), str(row[10].value), str(row[12].value), str(datetime.datetime.now()), extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename']]
                 
                 #append list and save
                 item_ws.append(rowlist)   
