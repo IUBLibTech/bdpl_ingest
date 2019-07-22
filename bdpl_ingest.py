@@ -341,25 +341,42 @@ def TransferContent():
         secureCopy_list = ['udf', 'iso9660']
         unhfs_list = ['osx', 'hfs', 'apple', 'apple_hfs', 'mfs']
         tsk_list = ['ntfs', 'fat', 'fat12', 'fat16', 'fat32', 'exfat', 'ext2', 'ext3', 'ext4', 'ufs', 'ufs1', 'ufs2', 'ext', 'yaffs2']
-        fs_list = []
         
         #get a list of disktype info
         with open(disktype_output, 'r') as f:
             dt_info = f.read().split('Partition ')
         
-        #See if there are any partitions on the image
-        if os.stat(mmls_output).st_size == 0:
-            print('\n\nNo partitions recognized by mmls.')
+        #see if known filesystems are present; if so, parse line to just pull out the identifying term
+        fs_list = []
+        for dt in dt_info:
+            if 'file system' in dt:
+                fs_list.append([d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower())
+        
+        #if we have mmls output, pull out key info
+        partition_info = []
+        if os.stat(mmls_output).st_size > 0:
             
-            #see if known filesystems are present; if so, parse line to just pull out the identifying term
-            for dt in dt_info:
-                if 'file system' in dt:
-                    fs_list.append([d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower())
+            with open(mmls_output, 'r') as f:
+                mmls_info = [m.split('\n') for m in f.read().splitlines()[5:]] 
             
-            #if any file systems have been found, copy or extract to /files/ directory
-            if len(fs_list) > 0:
-                
-                print('\n\nDisktype has identified the following file systems: ', ', '.join(fs_list))
+            for mm in mmls_info:
+                temp = {}
+                for dt in dt_info:
+                    if '{} sectors from {}'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt:
+                        if 'file system' in dt:
+                            fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
+                            fs_list.append(fsname)
+                            temp['start'] = mm[0].split()[2]
+                            temp['desc'] = fsname
+                            temp['slot'] = mm[0].split()[1]
+                            #now save this dictionary to our list of partition info
+                            partition_info.append(temp)
+    
+        if len(fs_list) > 0:
+        
+            if len(partition_info) == 0:
+
+                print('\n\nDisktype has identified the following file system: ', ', '.join(fs_list))
                 
                 if any(fs in ' '.join(fs_list) for fs in secureCopy_list):
                     secureCopy(optical_drive_letter(), files_dir)
@@ -373,33 +390,7 @@ def TransferContent():
                 else:
                     print('\n\nFile system not recognized by tools')
                     
-            else:
-                print('\n\nDisktype unable to identify image file system(s)')
-        
-        #if we *do* have an mmls report, then pull our key data points out: slot, start, and description.  Create a dictionary for each partition and then save these to a list
-        else:
-            print('\n\nOne or more partitions identified by mmls')
-            
-            with open(mmls_output, 'r') as f:
-                mmls_info = [m.split('\n') for m in f.read().splitlines()[5:]] 
-            
-            #loop through partition info; create a dictionary with partition number, sector offset, and file system name
-            partition_info = []
-            for mm in mmls_info:
-                temp = {}
-                for dt in dt_info:
-                    if '{} sectors from {}'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt:
-                        if 'file system' in dt:
-                            fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
-                            fs_list.append(fsname)
-                            temp['start'] = mm[0].split()[2]
-                            temp['desc'] = fsname
-                            temp['slot'] = mm[0].split()[1]
-                            #now save this dictionary to our list of partition info
-                            partition_info.append(temp)
-            
-            #go through the list to identify which need to be handled by unhfs and which by tsk_recover
-            if len(partition_info) > 0:
+            elif len(partition_info) >= 1:
                 for part_dict in partition_info:
                 
                     if len(partition_info) == 1:
@@ -412,11 +403,9 @@ def TransferContent():
                                       
                     elif part_dict['desc'] in tsk_list:
                         carvefiles('tsk_recover', imagefile, outfolder, tsk_carve_ver, part_dict['start'])
-                    
-                    else:
-                        print('\n\nFile system not recognized by tools')
-            else:
-                print('\n\nNo files to be replicated.')
+        
+        else:
+            print('\n\nNo files to be replicated.')
         
         #save file system list for later...
         pickleDump('fs_list', fs_list)
@@ -626,7 +615,7 @@ def check_fs(fs_type, disktype_output):
 
 def tsk_recover_func(start, out, imagefile):
     if start == '':
-        cmd = 'tsk_recover -a {} "C:\\temp\\mmls\\tsk'.format(imagefile) 
+        cmd = 'tsk_recover -a {} {}'.format(imagefile, out) 
     else:
         cmd = 'tsk_recover -a -o {} {} {}'.format(start, imagefile, out)
 
@@ -634,7 +623,7 @@ def tsk_recover_func(start, out, imagefile):
 
 def unhfs_func(start, out, imagefile):
     if start == '':
-        cmd = 'unhfs -o "C:\\temp\\mmls\\unhfs" {}'.format(imagefile)
+        cmd = 'unhfs -o {} {}'.format(out, imagefile)
     else:
         cmd = 'unhfs -partition {} -o {} {}'.format(start, out, imagefile)
     
