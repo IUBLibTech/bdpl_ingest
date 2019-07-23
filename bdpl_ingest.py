@@ -23,6 +23,7 @@ import sqlite3
 import subprocess
 import sys
 import uuid
+import lxml
 from lxml import etree
 import tempfile
 import fnmatch
@@ -445,11 +446,11 @@ def TransferContent():
         
         #check file to see how many titles are on DVD using lsdvd XML output.  If we're unable to read lsdvd output, assume 1 title as a default
         parser = etree.XMLParser(recover=True)
-        if os.path.exists(lsdvdout):
-            doc = etree.parse(lsdvdout, parser=parser)
+
         try:
+            doc = etree.parse(lsdvdout, parser=parser)
             titlecount = int(doc.xpath("count(//lsdvd//track)"))
-        except:
+        except (OSError, lxml.etree.XMLSyntaxError):
             titlecount = 1
             
         #check current directory; change to a temp directory to store files
@@ -468,7 +469,7 @@ def TransferContent():
         
         #loop through titles and rip each one to mpeg using native streams
         for title in range(1, (titlecount+1)):
-            titlelist = glob.glob(os.path.join(ffmpeg_source, "VIDEO_TS", "VTS_%s_*.VOB" % str(title).zfill(2)))
+            titlelist = glob.glob(os.path.join(ffmpeg_source, "**/VIDEO_TS", "VTS_%s_*.VOB" % str(title).zfill(2)), recursive=True)
             if len(titlelist) > 0:
                 timestamp = str(datetime.datetime.now())
                 

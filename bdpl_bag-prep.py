@@ -778,7 +778,7 @@ def main():
                         SIP_dict = pickle.load(file)
                 
                 #write information on the specfic barcode
-                rowlist = [barcode, unit, shipmentID, str(row[2].value), str(row[3].value), str(row[4].value), str(row[6].value), str(row[7].value), str(row[8].value), str(row[9].value), str(row[10].value), str(row[12].value), str(datetime.datetime.now()), extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename']]
+                rowlist = [barcode, unit, shipmentID, str(row[2].value), str(row[3].value), str(row[4].value), str(row[6].value), str(row[7].value), str(row[8].value), str(row[9].value), str(row[10].value), str(row[12].value), str(datetime.datetime.now()), extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename'], str(row[27].value]
                 
                 #append list and save
                 item_ws.append(rowlist)   
