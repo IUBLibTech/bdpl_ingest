@@ -343,7 +343,7 @@ def main():
         print('\nWorking on item: %s' % barcode)    
         
         #if content will not be moved to SDA, just skip folder for now and write to skipped and moved lists
-        if str(row[26].value) == "Delete content":
+        if str(row[27].value) == "Delete content":
             if not check_list(deaccession_list, barcode):
                 
                 if not os.path.exists('deaccessioned'):
@@ -365,7 +365,7 @@ def main():
                 print('\n\t%s has been moved to the "deaccession" folder.' % barcode)
         
         #if content has been determined to be of value, complete prep workflow.
-        elif str(row[26].value) == "Transfer to SDA":
+        elif str(row[27].value) == "Transfer to SDA":
             
             '''CHECK THAT FOLDER EXISTS'''
             #get full path to barcode folder.
@@ -642,8 +642,13 @@ def main():
             
                 print('\n\tCreating bag for barcode folder...')
                 
+                if str(row[21].value) == str(row[22].value):
+                    dates = str(row[21].value)
+                else:
+                    dates = '%s-%s' % (str(row[21].value), str(row[22].value))
+                
                 #description for bag-info.txt currently includes source media, label transcription, and appraisal note.
-                desc = '%s. %s. %s' %(str(row[6].value), str(row[7].value), str(row[8].value))
+                desc = 'Source: %s | Label/Title: %s. | Appraisal notes: %s. | Date range: %s' %(str(row[6].value), str(row[7].value), str(row[8].value), dates)
                 desc.replace('\n', ' ')    
         
                 try:
@@ -778,7 +783,7 @@ def main():
                         SIP_dict = pickle.load(file)
                 
                 #write information on the specfic barcode
-                rowlist = [barcode, unit, shipmentID, str(row[2].value), str(row[3].value), str(row[4].value), str(row[6].value), str(row[7].value), str(row[8].value), str(row[9].value), str(row[10].value), str(row[12].value), str(datetime.datetime.now()), extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename'], str(row[27].value]
+                rowlist = [barcode, unit, shipmentID, str(row[2].value), str(row[3].value), str(row[4].value), str(row[6].value), str(row[7].value), str(row[8].value), str(row[9].value), dates, str(row[10].value), str(row[12].value), str(datetime.datetime.now()), extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename'], str(row[28].value)]
                 
                 #append list and save
                 item_ws.append(rowlist)   
@@ -837,14 +842,14 @@ def main():
         #if other appraisal decision is indicated, note barcode in a list and move folder.
         else:
             if not check_list(other_list, barcode):
-                list_write(other_list, barcode, str(row[26].value))
+                list_write(other_list, barcode, str(row[27].value))
                 
                 if not os.path.exists('review'):
                     os.mkdir('review')
                 
                 shutil.move(barcode, 'review')
                 
-                print('\n\tAlternate appraisal decision: %s. \n\tConfer with collecting unit as needed.' % str(row[26].value))
+                print('\n\tAlternate appraisal decision: %s. \n\tConfer with collecting unit as needed.' % str(row[27].value))
             
             else:
                 print('\n\t%s has been moved to the "Review" folder.' % barcode)

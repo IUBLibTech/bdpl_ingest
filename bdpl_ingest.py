@@ -1131,7 +1131,7 @@ def write_html(header, path, file_delimiter, html):
                 html.write('\n</tbody>')
                 html.write('\n</table>')
                     
-                appraisal_dict['PII'] = 'Potential sensitive information identified: %s.' % ', '.join(pii_list)
+                appraisal_dict['PII'] = '%s.' % ', '.join(pii_list)
         
             else:
                 html.write('\nNone found.')
@@ -1321,8 +1321,8 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
         if row:
             dates.append(row[0])
     if not dates:
-        earliest_date = "N/A"
-        latest_date = "N/A"
+        earliest_date = "undated"
+        latest_date = "undated"
     else:
         earliest_date = min(dates)
         latest_date = max(dates)
@@ -1450,7 +1450,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     else:
         date_range = '%s to %s' % (begin_date, end_date)
     
-    appraisal_dict.update({'Source': barcode.get(), 'Dates': date_range, 'Extent-normal': size, 'Extent-raw': size_bytes, 'Files': num_files, 'Duplicates': distinct_dupes, 'FormatCount': num_formats, 'Unidentified':unidentified_files})  
+    appraisal_dict.update({'Source': barcode.get(), 'begin_date': begin_date, 'end_date' : end_date, 'Extent-normal': size, 'Extent-raw': size_bytes, 'Files': num_files, 'Duplicates': distinct_dupes, 'FormatCount': num_formats, 'Unidentified':unidentified_files})  
     
     pickleDump('appraisal_dict', appraisal_dict)
     
@@ -2137,22 +2137,23 @@ def writeSpreadsheet():
     ws.cell(row=newrow, column=19, value = appraisal_dict['Duplicates'])
     ws.cell(row=newrow, column=20, value = appraisal_dict['Unidentified'])
     ws.cell(row=newrow, column=21, value = appraisal_dict['Formats'])
-    ws.cell(row=newrow, column=22, value = appraisal_dict['Dates'])   
-    ws.cell(row=newrow, column=23, value =  appraisal_dict['Virus'])
+    ws.cell(row=newrow, column=22, value = appraisal_dict['begin_date'])
+    ws.cell(row=newrow, column=23, value = appraisal_dict['end_date'])
+    ws.cell(row=newrow, column=24, value =  appraisal_dict['Virus'])
     if 'PII' in appraisal_dict:
-        ws.cell(row=newrow, column=24, value = appraisal_dict['PII'])
+        ws.cell(row=newrow, column=25, value = appraisal_dict['PII'])
         
-    ws.cell(row=newrow, column=25).value = '=HYPERLINK("{}", "{}")'.format(".\\%s\\metadata\\reports\\report.html" % barcode.get(), "View report")
+    ws.cell(row=newrow, column=26).value = '=HYPERLINK("{}", "{}")'.format(".\\%s\\metadata\\reports\\report.html" % barcode.get(), "View report")
     
-    ws.cell(row=newrow, column=26).value = '=HYPERLINK("{}", "{}")'.format(".\\%s" % barcode.get(), "View transfer folder")
+    ws.cell(row=newrow, column=27).value = '=HYPERLINK("{}", "{}")'.format(".\\%s" % barcode.get(), "View transfer folder")
 
     if bc_dict['initial_appraisal'] == "No appraisal needed":
-        ws.cell(row=newrow, column=27, value = "Transfer to SDA")
+        ws.cell(row=newrow, column=28, value = "Transfer to SDA")
     
     if jobType.get() == 'DVD':
-        ws.cell(row=newrow, column=28).value = 'DVD: transfer "files" to MCO'
+        ws.cell(row=newrow, column=29).value = 'DVD: transfer "files" to MCO'
     if jobType.get() == 'CDDA':
-        ws.cell(row=newrow, column=28).value = 'CD-DA: transfer "files" to MCO'
+        ws.cell(row=newrow, column=29).value = 'CD-DA: transfer "files" to MCO'
 
     #save and close spreadsheet
     wb.save(spreadsheet.get())       
