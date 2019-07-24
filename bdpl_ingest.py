@@ -1444,11 +1444,6 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     
     #save information to appraisal_dict
     appraisal_dict = pickleLoad('appraisal_dict')
-            
-    if begin_date == end_date:
-        date_range = begin_date
-    else:
-        date_range = '%s to %s' % (begin_date, end_date)
     
     appraisal_dict.update({'Source': barcode.get(), 'begin_date': begin_date, 'end_date' : end_date, 'Extent-normal': size, 'Extent-raw': size_bytes, 'Files': num_files, 'Duplicates': distinct_dupes, 'FormatCount': num_formats, 'Unidentified':unidentified_files})  
     
@@ -1937,14 +1932,10 @@ def analyzeContent():
                 formatcount += 1
                 fileformats.append(row[0])
             fileformats = [element or 'Unidentified' for element in fileformats] # replace empty elements with 'Unidentified'
-            if formatcount > 10:
-                appraisal_dict['Formats'] = "The most prevalent file formats (out of a total %s) are:\n%s" % (formatcount, '\n'.join(fileformats[:10]))
-            elif formatcount == 0:
-                appraisal_dict['Formats'] = "-"
-            elif formatcount <= 10:
-                appraisal_dict['Formats'] = "The most prevalent file formats (out of a total %s) are:\n%s" % (formatcount, '\n'.join(fileformats))
+            if formatcount > 0:
+                appraisal_dict['Formats'] = "Top file formats (out of %s total) are: %s" % (formatcount, ' | '.join(fileformats[:10]))
             else:
-                appraisal_dict['Formats'] = "ERROR! Check format CSV file: %s" % formatcsv
+                appraisal_dict['Formats'] = "-"
             
     except IOError:
         appraisal_dict['Formats'] = "ERROR! No formats.csv file to pull formats from."
