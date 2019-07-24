@@ -341,7 +341,7 @@ def TransferContent():
         #now get information on filesystems and (if present) partitions.  We will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
         secureCopy_list = ['udf', 'iso9660']
         unhfs_list = ['osx', 'hfs', 'apple', 'apple_hfs', 'mfs']
-        tsk_list = ['ntfs', 'fat', 'fat12', 'fat16', 'fat32', 'exfat', 'ext2', 'ext3', 'ext4', 'ufs', 'ufs1', 'ufs2', 'ext', 'yaffs2']
+        tsk_list = ['ntfs', 'fat', 'fat12', 'fat16', 'fat32', 'exfat', 'ext2', 'ext3', 'ext4', 'ufs', 'ufs1', 'ufs2', 'ext', 'yaffs2', 'hfs plus', 'hfs+']
         
         #get a list of disktype info
         with open(disktype_output, 'r') as f:
@@ -366,7 +366,6 @@ def TransferContent():
                     if '{} sectors from {}'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt:
                         if 'file system' in dt:
                             fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
-                            fs_list.append(fsname)
                             temp['start'] = mm[0].split()[2]
                             temp['desc'] = fsname
                             temp['slot'] = mm[0].split()[1]
@@ -375,9 +374,11 @@ def TransferContent():
     
         if len(fs_list) > 0:
         
+            print('\n\nDisktype has identified the following file system: ', ', '.join(fs_list))
+        
             if len(partition_info) == 0:
 
-                print('\n\nDisktype has identified the following file system: ', ', '.join(fs_list))
+                print('\nNo partition information...')
                 
                 if any(fs in ' '.join(fs_list) for fs in secureCopy_list):
                     secureCopy(optical_drive_letter(), files_dir)
@@ -392,6 +393,7 @@ def TransferContent():
                     print('\n\nFile system not recognized by tools')
                     
             elif len(partition_info) >= 1:
+            
                 for part_dict in partition_info:
                 
                     if len(partition_info) == 1:
