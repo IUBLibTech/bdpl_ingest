@@ -23,6 +23,7 @@ import sqlite3
 import subprocess
 import sys
 import uuid
+import xml
 import lxml
 from lxml import etree
 import tempfile
@@ -742,8 +743,9 @@ def fix_dates(files_dir, dfxml_output):
             else:
                 continue
 
-    except ValueError:
-       pass
+    except (ValueError, xml.etree.ElementTree.ParseError):
+        print('\nUnable to read DFXML!')
+        pass
     
     premis_list = pickleLoad('premis_list')
         
