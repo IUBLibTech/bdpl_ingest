@@ -250,9 +250,9 @@ def main():
     
     '''SET UP: VERIFY SPREADSHEET, GATHER INITIAL STATS, AND CHECK FOR INCONSISTENCIES WITH BARCODE FOLDERS IN SHIPMENT'''
     #make sure column headings are correct; exit if they don't match targets
-    if ['Appraisal results', 'Source type', 'Label transcription', 'Initial appraisal notes'] != [ws['AA1'].value, ws['G1'].value, ws['H1'].value, ws['I1'].value]:
+    if ['Appraisal results', 'Source type', 'Label transcription', 'End Date'] != [ws['AB1'].value, ws['G1'].value, ws['H1'].value, ws['W1'].value]:
         print('\n\nERROR: SPREADSHEET COLUMNS ARE NOT IN CORRECT ORDER')
-        print('Current headings:\n -AA1 (Appraisal results) = %s\n - G1 (Source type) = %s\n - H1 (Label transcription) = %s\n - I1 (Initial appraisal notes) = %s' % (ws['AA1'].value, ws['G1'].value, ws['H1'].value, ws['I1'].value))
+        print('Current headings:\n -AA1 (Appraisal results) = %s\n - G1 (Source type) = %s\n - H1 (Label transcription) = %s\n - I1 (Initial appraisal notes) = %s' % (ws['AA1'].value, ws['G1'].value, ws['H1'].value, ws['W1'].value))
         sys.exit(1)
 
     #we only want to run these steps the first time through...

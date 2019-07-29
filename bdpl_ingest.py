@@ -453,8 +453,15 @@ def TransferContent():
         try:
             doc = etree.parse(lsdvdout, parser=parser)
             titlecount = int(doc.xpath("count(//lsdvd//track)"))
+        #if lsdvd fails; get the title count by parsing directory...
         except (OSError, lxml.etree.XMLSyntaxError):
-            titlecount = 1
+            
+            titlelist = glob.glob(os.path.join(ffmpeg_source, '**/VIDEO_TS', '*_*_*.VOB'), recursive=True)
+            count = []
+            for t in titlelist:
+                count.append(int(t.rsplit('_', 2)[1]))
+            
+            titlecount = max(set(count))
             
         #check current directory; change to a temp directory to store files
         bdpl_cwd = 'C:\\BDPL\\scripts'
