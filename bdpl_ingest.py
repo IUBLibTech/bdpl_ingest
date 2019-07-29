@@ -688,12 +688,6 @@ def fix_dates(files_dir, dfxml_output):
     
     print('\n\nFILE MAC TIME CORRECTION (USING DFXML)')
     
-    #return if fiwalk was unable to read file system
-    # with open(dfxml_output, 'r') as f:
-        # if "TSK_Error 'Cannot determine file system type'" in f.read():
-            # print('\n\nFiwalk was unable to read disk image file system.')
-            # return
-    
     timestamp = str(datetime.datetime.now())
      
     try:

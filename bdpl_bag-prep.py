@@ -264,12 +264,19 @@ def main():
             if col.value == 'Identifier':
                 continue
             else:
-                spreadsheet_list.append(col.value)
+                spreadsheet_list.append(str(col.value))
         
         dir_list = next(os.walk(shipment))[1]
     
         missing_from_dir = list(set(spreadsheet_list) - set(dir_list))
         missing_from_spreadsheet = list(set(dir_list) - set(spreadsheet_list))
+        
+        #remove any of our working files from this list
+        for dir in ['review', 'reports', 'unaccounted', 'deaccessioned']:
+            try:
+                missing_from_spreadsheet.remove(dir)
+            except ValueError:
+                pass
     
         #before we create any temp folders, get date range of barcode directories for shipment stats (acquired by using max/min of dir_list, using modified date as key)
         latest_date = datetime.datetime.fromtimestamp(os.stat(max(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')
@@ -649,7 +656,7 @@ def main():
                 
                 #description for bag-info.txt currently includes source media, label transcription, and appraisal note.
                 desc = 'Source: %s | Label/Title: %s. | Appraisal notes: %s. | Date range: %s' %(str(row[6].value), str(row[7].value), str(row[8].value), dates)
-                desc.replace('\n', ' ')    
+                desc = desc.replace('\n', ' ')    
         
                 try:
                     bagit.make_bag(target, {"Source-Organization" : unit, "External-Description" : desc, "External-Identifier" : barcode}, checksums=["md5"])
@@ -661,7 +668,7 @@ def main():
                     
                     #write info so we can use it later
                     info = {'unit' : unit, 'description' : desc}
-                    with open(os.path.join(target, '%s-bag-info.txt' % barcode), 'wb') as fi:
+                    with open(os.path.join(report_dir, '%s-bag-info.txt' % barcode), 'wb') as fi:
                         pickle.dump(info, fi)
                     
                     continue
@@ -782,8 +789,16 @@ def main():
                     with open(SIP_stats, 'rb') as file:
                         SIP_dict = pickle.load(file)
                 
+                if row[28].value is None:
+                    access_option = '-'
+                else:
+                    access_option = str(row[28].value)
+                    
+                earliest_date = str(row[21].value) 
+                latest_date = str(row[22].value)
+                
                 #write information on the specfic barcode
-                rowlist = [barcode, unit, shipmentID, str(row[2].value), str(row[3].value), str(row[4].value), str(row[6].value), str(row[7].value), str(row[8].value), str(row[9].value), dates, str(row[10].value), str(row[12].value), str(datetime.datetime.now()), extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename'], str(row[28].value)]
+                rowlist = [barcode, unit, shipmentID, str(row[2].value), str(row[3].value), str(row[4].value), str(row[6].value), str(row[7].value), str(row[8].value), str(row[9].value), earliest_date, latest_date, str(row[10].value), str(row[12].value), str(datetime.datetime.now()), extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename'], access_option]
                 
                 #append list and save
                 item_ws.append(rowlist)   

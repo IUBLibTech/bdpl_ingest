@@ -36,10 +36,12 @@ def main():
             print('\nShipment folder not recognized; enclose in quotes and use "/".\n')
             continue
         
-        failed_list = os.path.join(shipment, 'reports', 'failed-packaging.txt')
-        bagged_list = os.path.join(shipment, 'reports', 'bagged.txt')
-        deaccession_list = os.path.join(shipment, 'reports', 'deaccession.txt')
-        cleaned_list = os.path.join(shipment, 'reports', 'cleaned.txt')
+        report_dir = os.path.join(shipment, 'reports')
+        
+        failed_list = os.path.join(report_dir, 'failed-packaging.txt')
+        bagged_list = os.path.join(report_dir, 'bagged.txt')
+        deaccession_list = os.path.join(report_dir, 'deaccession.txt')
+        cleaned_list = os.path.join(report_dir, 'cleaned.txt')
         
         if os.path.exists(failed_list):
             break
@@ -57,26 +59,18 @@ def main():
             #make sure we're dealing with a bagit issue
             if line.split()[1] == 'bagit':            
             
-                bag_info = os.path.join(barcode_path, '%s-bag-info.txt' % barcode)
+                bag_info = os.path.join(report_dir, '%s-bag-info.txt' % barcode)
                 
                 info = {}
-                bag_info_moved = os.path.join(shipment, os.path.basename(bag_info))
-                
                 if os.path.exists(bag_info):
                     with open(bag_info, 'rb') as f:
                         info = pickle.load(f)
                     unit = info['unit']
                     desc = info['description']
-                    shutil.move(bag_info, bag_info_moved)
-                
-                elif os.path.exists(bag_info_moved):
-                    with open(bag_info_moved, 'rb') as f:
-                        info = pickle.load(f)
-                    unit = info['unit']
-                    desc = info['description']
+                    desc = desc.replace('\n', ' ')
+                    
                 
                 else:
-                    bag_info_moved = ''
                     desc = ''
                     unit = ''
                 
@@ -109,7 +103,7 @@ def main():
                     bagit.make_bag(barcode_path, {"Source-Organization" : unit, "External-Description" : desc, "External-Identifier" : barcode}, checksums=["md5"])
                     failed_status(failed_list, barcode)
                     list_write(bagged_list, barcode)
-                    os.remove(bag_info_moved)
+                    os.remove(bag_info)
                     
                 except (RuntimeError, PermissionError, bagit.BagError, OSError) as e:
                     failed_status(failed_list, barcode, e)

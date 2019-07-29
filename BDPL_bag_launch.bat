@@ -34,7 +34,7 @@ IF NOT EXIST Z: (
 
 CLS
 python %3\scripts\bdpl_bag-prep.py
-EXIT
+EXIT /B
 
 :No1
 ECHO Missing server address
