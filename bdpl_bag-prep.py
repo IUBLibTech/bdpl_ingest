@@ -266,31 +266,57 @@ def main():
             else:
                 spreadsheet_list.append(str(col.value))
         
+        
+        #gte list of directories in our shipment folder
         dir_list = next(os.walk(shipment))[1]
-    
-        missing_from_dir = list(set(spreadsheet_list) - set(dir_list))
-        missing_from_spreadsheet = list(set(dir_list) - set(spreadsheet_list))
         
         #remove any of our working files from this list
         for dir in ['review', 'reports', 'unaccounted', 'deaccessioned']:
             try:
-                missing_from_spreadsheet.remove(dir)
+                dir_list.remove(dir)
             except ValueError:
                 pass
-    
-        #before we create any temp folders, get date range of barcode directories for shipment stats (acquired by using max/min of dir_list, using modified date as key)
-        latest_date = datetime.datetime.fromtimestamp(os.stat(max(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')
-        earliest_date = datetime.datetime.fromtimestamp(os.stat(min(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')
         
-        tdelta = datetime.datetime.strptime(latest_date, '%Y%m%d') - datetime.datetime.strptime(earliest_date, '%Y%m%d')
+        #see if any barcode folders are missing
+        missing_from_dir = list(set(spreadsheet_list) - set(dir_list))
+        
+        #if we've already packaged content, remove any completed items from this 'missing' list
+        if os.path.exists(cleaned_list):
+            with open(cleaned_list, 'r') as f:
+                for dir in f.read().splitlines():
+                    if dir in missing_from_dir:
+                        missing_from_dir.remove(dir)
+        
+        
+        missing_from_spreadsheet = list(set(dir_list) - set(spreadsheet_list))
+        
+        #Get date info on items for shipment stats (acquired by using max/min of dir_list, using modified date as key)
+        latest_date = datetime.datetime.fromtimestamp(os.stat(max(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')
+        earliest_date = datetime.datetime.fromtimestamp(os.stat(min(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')        
+        
+        duration_stats = {}
+        if os.path.exists(duration_doc):
+            with open(duration_doc, 'wb') as file:
+                duration_stats = pickle.load(file)
+                
+            if earliest_date < duration_stats['earliest']:
+                duration_stats['earliest'] = earliest_date
+                
+            if latest_date > duration_stats['latest']:
+                duration_stats['latest'] = latest_date
+        
+        else:
+            duration_stats['earliest'] = earliest_date
+            duration_stats['latest'] = latest_date
+
+        
+        tdelta = datetime.datetime.strptime(duration_stats['latest'], '%Y%m%d') - datetime.datetime.strptime(duration_stats['earliest'], '%Y%m%d')
         
         #use 1 day as minimum timedelta
         if tdelta < datetime.timedelta(days=1):
-            duration = 1
+            duration_stats['duration'] = 1
         else:
-            duration = int(str(tdelta).split()[0])
-            
-        duration_stats = {'duration' : duration, 'earliest' : earliest_date, 'latest' : latest_date}
+            duration_stats['duration'] = int(str(tdelta).split()[0])
     
         #make our report directory
         if not os.path.exists(report_dir):
@@ -387,13 +413,15 @@ def main():
             #make sure that target contains content; first, check the appraisal spreadsheet 
             if not check_list(bagged_list, barcode):
                 try:
-                    if row[17].value == 0 and len(os.listdir(os.path.join(target, 'disk-image'))) == 0: 
-                        list_write(failed_list, barcode, 'check_folder\tNO CONTENT IN BARCODE FOLDER: CHANGE APPRAISAL DECISION?')
-                        continue
+                    if row[17].value == 0:
+                        if os.path.exists(os.path.join(target, 'disk-image')) and len(os.listdir(os.path.join(target, 'disk-image'))) == 0: 
+                            list_write(failed_list, barcode, 'check_folder\tNO CONTENT IN BARCODE FOLDER: CHANGE APPRAISAL DECISION?')
+                            continue
                 except TypeError:
-                    if get_size(os.path.join(target, 'files')) == 0 and len(os.listdir(os.path.join(target, 'disk-image'))) == 0: 
-                        list_write(failed_list, barcode, 'check_folder\tNO CONTENT IN BARCODE FOLDER: CHANGE APPRAISAL DECISION?')
-                        continue
+                    if get_size(os.path.join(target, 'files')) == 0:
+                        if os.path.exists(os.path.join(target, 'disk-image')) and len(os.listdir(os.path.join(target, 'disk-image'))) == 0: 
+                            list_write(failed_list, barcode, 'check_folder\tNO CONTENT IN BARCODE FOLDER: CHANGE APPRAISAL DECISION?')
+                            continue
             
             #get file format info to include with master spreadsheet.  See if we've already saved a tally of this
             format_list = []
@@ -789,10 +817,13 @@ def main():
                     with open(SIP_stats, 'rb') as file:
                         SIP_dict = pickle.load(file)
                 
-                if row[28].value is None:
+                try:
+                    if row[28].value is None:
+                        access_option = '-'
+                    else:
+                        access_option = str(row[28].value)
+                except IndexError:
                     access_option = '-'
-                else:
-                    access_option = str(row[28].value)
                     
                 earliest_date = str(row[21].value) 
                 latest_date = str(row[22].value)
@@ -937,9 +968,10 @@ def main():
         next(iterrows)
         
         for row in iterrows:    
-            if unit in row[0].value and shipmentID in row[1].value:
-                newrow = row[0].row
-                break
+            if not row[0].value is None:
+                if unit in row[0].value and shipmentID in row[1].value:
+                    newrow = row[0].row
+                    break
         
         print('\nWriting cumulative information to spreadsheet...')
         
@@ -979,12 +1011,14 @@ def main():
         puid_dict[id] = pu+1
 
     format_sheet = 'puids_%s_%s' % (unit, shipmentID)
-    if not format_sheet in master_wb.sheetnames:
-        fws = master_wb.create_sheet(format_sheet)
-        fws.append(puid_list)
-    else:
-        fws = master_wb[format_sheet]
     
+    #if this puid sheet already exists, we'll just remove it and start anew...
+    if format_sheet in master_wb.sheetnames:
+        master_wb.remove(master_wb[format_sheet])
+    
+    fws = master_wb.create_sheet(format_sheet)
+    fws.append(puid_list)
+
     print('\nWriting format information...')
     
     #loop through the dictionaries of our format report

@@ -34,6 +34,10 @@ IF NOT EXIST Z: (
 
 CLS
 python %3\scripts\bdpl_bag-prep.py
+ECHO.
+ECHO.
+ECHO.
+PAUSE
 EXIT /B
 
 :No1
