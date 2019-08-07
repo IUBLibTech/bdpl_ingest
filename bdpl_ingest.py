@@ -12,6 +12,7 @@ http://bitarchivist.net
 """
 
 from collections import OrderedDict
+from collections import Counter
 import csv
 import datetime
 import errno
@@ -957,10 +958,7 @@ def generate_reports(cursor, html, reports_dir):
     write_html('MIME types', path, ',', html)
 
     # dates report
-    sql = "SELECT SUBSTR(modified, 1, 4) as 'year', COUNT(*) as 'num' FROM siegfried GROUP BY year ORDER BY num DESC"
     path = os.path.join(reports_dir, 'years.csv')
-    year_header = ['Year Last Modified', 'Count']
-    sqlite_to_csv(sql, path, year_header, cursor)
     write_html('Last modified dates by year', path, ',', html)
     
     # unidentified files report
@@ -1064,7 +1062,7 @@ def write_html(header, path, file_delimiter, html):
             #save a copy of the duplicates for the reports
             reports_dir = bdpl_vars()['reports_dir']
             dup_report = os.path.join(reports_dir, 'duplicates.csv')
-            with open(dup_report, "w", newline="") as f:
+            with open(dup_report, "w", newline="", encoding='utf-8') as f:
                 writer = csv.writer(f)
                 dup_header = ['Filename', 'Filesize', 'Date modified', 'Checksum']
                 writer.writerow(dup_header)
@@ -1267,77 +1265,35 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     cursor.execute("SELECT COUNT(*) FROM siegfried WHERE id='UNKNOWN';") # unidentified files
     unidentified_files = cursor.fetchone()[0]
 
-    year_sql = "SELECT DISTINCT SUBSTR(modified, 1, 4) as 'year' FROM siegfried;" # min and max year
-    year_path = os.path.join(reports_dir, 'uniqueyears.csv')
-    # if python3, specify newline to prevent extra csv line in windows
-    # else, open and read csv in bytes mode
-    # see: https://stackoverflow.com/questions/3348460/csv-file-written-with-python-has-blank-lines-between-each-row
-    if (sys.version_info > (3, 0)):
-        year_report = open(year_path, 'w', newline='')
-    else:
-        year_report = open(year_path, 'w')
-    w = csv.writer(year_report, lineterminator='\n')
-    for row in cursor.execute(year_sql):
-        w.writerow(row)
-    year_report.close()
-
-    if (sys.version_info > (3, 0)):
-        year_report_read = open(year_path, 'r', newline='')
-    else:
-        year_report_read = open(year_path, 'r')
-    r = csv.reader(year_report_read)
-    years = []
-    for row in r:
-        if row == '':
-            continue
-        elif row:
-            years.append(row[0])
-    if not years:
-        begin_date = "-"
-        end_date = "-"  
-    else:
-        try:
-            begin_date = min(years, key=float)
-        except ValueError:
-            badfloat = years.index(min(years))
-            del years[badfloat]
-            begin_date = min(years, key=float)
-            
-        end_date = max(years, key=float)
+    #next get date information using info pulled from dfxml
+    date_info = []
+    if len(file_stats) > 0:
+        for dict in file_stats:
+            date_info.append(dict['mtime'])
         
-    year_report_read.close()
-
-    datemodified_sql = "SELECT DISTINCT modified FROM siegfried;" # min and max full modified date
-    datemodified_path = os.path.join(reports_dir, 'datemodified.csv')
-    # specify newline in python3 to prevent extra csv lines in windows
-    # read and write csv in byte mode in python2
-    if (sys.version_info > (3, 0)):
-        date_report = open(datemodified_path, 'w', newline='')
+        begin_date = min(date_info)[:4]
+        end_date = max(date_info)[:4]
+        earliest_date = min(date_info)
+        latest_date = max(date_info)   
+    
     else:
-        date_report = open(datemodified_path, 'w')
-    w = csv.writer(date_report, lineterminator='\n')
-    for row in cursor.execute(datemodified_sql):
-        w.writerow(row)
-    date_report.close()
-
-    if (sys.version_info > (3, 0)):
-        date_report_read = open(datemodified_path, 'r', newline='')
-    else:
-        date_report_read = open(datemodified_path, 'r')
-    r = csv.reader(date_report_read)
-    dates = []
-    for row in r:
-        if row:
-            dates.append(row[0])
-    if not dates:
+        begin_date = "undated"
+        end_date = "undated"
         earliest_date = "undated"
         latest_date = "undated"
-    else:
-        earliest_date = min(dates)
-        latest_date = max(dates)
-    date_report_read.close()
-
-    os.remove(datemodified_path) # delete temporary datemodified file from csv reports dir
+        
+    #generate a year count
+    year_info = [x[:4] for x in date_info]
+    
+    year_count = dict(Counter(year_info))
+    
+    path = os.path.join(reports_dir, 'years.csv')    
+    with open(path, 'w') as f:
+        writer = csv.writer(f)
+        year_header = ['Year Last Modified', 'Count']
+        writer.writerow(year_header)
+        for key, value in year_count.items():
+            writer.writerow([key, value])
 
     cursor.execute("SELECT COUNT(DISTINCT format) as formats from siegfried WHERE format <> '';") # number of identfied file formats
     num_formats = cursor.fetchone()[0]
@@ -1731,14 +1687,14 @@ def produce_dfxml(target):
                     if counter <= file_stats[-1]['counter']:
                         continue
                 
-                target = os.path.join(root, file)
-                size = os.path.getsize(target)
-                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(target)).isoformat()
-                ctime = datetime.datetime.fromtimestamp(os.path.getctime(target)).isoformat()
-                atime = datetime.datetime.fromtimestamp(os.path.getatime(target)).isoformat()[:-7]
-                checksum = md5(target)
+                file_target = os.path.join(root, file)
+                size = os.path.getsize(file_target)
+                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(file_target)).isoformat()
+                ctime = datetime.datetime.fromtimestamp(os.path.getctime(file_target)).isoformat()
+                atime = datetime.datetime.fromtimestamp(os.path.getatime(file_target)).isoformat()[:-7]
+                checksum = md5(file_target)
                 
-                file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'ctime' : ctime, 'atime' : atime, 'checksum' : checksum, 'counter' : counter}
+                file_dict = { 'name' : file_target, 'size' : size, 'mtime' : mtime, 'ctime' : ctime, 'atime' : atime, 'checksum' : checksum, 'counter' : counter}
                 
                 file_stats.append(file_dict)
                 
