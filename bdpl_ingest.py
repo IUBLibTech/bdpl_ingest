@@ -456,7 +456,6 @@ def TransferContent():
             titlecount = int(doc.xpath("count(//lsdvd//track)"))
         #if lsdvd fails; get the title count by parsing directory...
         except (OSError, lxml.etree.XMLSyntaxError):
-            
             titlelist = glob.glob(os.path.join(ffmpeg_source, '**/VIDEO_TS', '*_*_*.VOB'), recursive=True)
             count = []
             for t in titlelist:
@@ -1129,12 +1128,15 @@ def write_html(header, path, file_delimiter, html):
                             html.write('\n<td>Sensitive terms and phrases</td>')
                             html.write('\n<td>' + line.split()[1] + '</td>')
                             html.write('\n<td>See: <a href="./find_histogram.txt">Keyword histogram</a></td>')
-                            pii_list.append('pre-defined words or phrases')
+                            pii_list.append('TERMS')
                         html.write('\n</tr>')   
                 html.write('\n</tbody>')
                 html.write('\n</table>')
-                    
-                appraisal_dict['PII'] = '%s.' % ', '.join(pii_list)
+                
+                if len(pii_list) > 0:
+                    appraisal_dict['PII'] = '%s.' % ', '.join(pii_list)
+                else: 
+                    appraisal_dict['PII'] = '-'
         
             else:
                 html.write('\nNone found.')
@@ -1288,12 +1290,13 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     year_count = dict(Counter(year_info))
     
     path = os.path.join(reports_dir, 'years.csv')    
-    with open(path, 'w') as f:
+    with open(path, 'w', newline='') as f:
         writer = csv.writer(f)
         year_header = ['Year Last Modified', 'Count']
         writer.writerow(year_header)
-        for key, value in year_count.items():
-            writer.writerow([key, value])
+        if len(year_count) > 0:
+            for key, value in year_count.items():
+                writer.writerow([key, value])
 
     cursor.execute("SELECT COUNT(DISTINCT format) as formats from siegfried WHERE format <> '';") # number of identfied file formats
     num_formats = cursor.fetchone()[0]
@@ -1643,26 +1646,25 @@ def produce_dfxml(target):
                 
         #for jobs other than DVD, parse dfxml to get info for later...
         file_stats = []
-        if jobType.get() != 'DVD':
+        
+        tree = etree.parse(dfxml_output)
+        
+        file_objects = tree.xpath("//fileobject")
+        
+        for file_object in file_objects:
+            if file_object.findtext("./name_type") == "r" and file_object.findtext("./alloc") == "1":
+                target = file_object.findtext("./filename")
+                size = file_object.findtext("./filesize")
+                checksum = file_object.findtext("./hashdigest[@type='md5']")
+                if file_object.findtext("./mtime"):
+                    mtime = datetime.datetime.utcfromtimestamp(int(file_object.findtext("./mtime"))).isoformat()
+                elif file_object.findtext("./crtime"):
+                    mtime = datetime.datetime.utcfromtimestamp(int(file_object.findtext("./crtime"))).isoformat()
+                else:
+                    mtime = '-'
 
-            tree = etree.parse(dfxml_output)
-            
-            file_objects = tree.xpath("//fileobject")
-            
-            for file_object in file_objects:
-                if file_object.findtext("./name_type") == "r" and file_object.findtext("./alloc") == "1":
-                    target = file_object.findtext("./filename")
-                    size = file_object.findtext("./filesize")
-                    checksum = file_object.findtext("./hashdigest[@type='md5']")
-                    if file_object.findtext("./mtime"):
-                        mtime = datetime.datetime.utcfromtimestamp(int(file_object.findtext("./mtime"))).isoformat()
-                    elif file_object.findtext("./crtime"):
-                        mtime = datetime.datetime.utcfromtimestamp(int(file_object.findtext("./crtime"))).isoformat()
-                    else:
-                        mtime = '-'
-
-                    file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
-                    file_stats.append(file_dict)
+                file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
+                file_stats.append(file_dict)
     
     #use custom operation if we have a copy operation    
     elif os.path.isdir(target):
