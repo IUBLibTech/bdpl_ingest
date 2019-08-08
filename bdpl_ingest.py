@@ -1233,12 +1233,12 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     #next, create a new dictionary that IDs checksums that correspond to 1 or more files. NOTE: the 'file_stats' list will be empty for DVDs, so we'll skip this step in that case
     if len(file_stats) > 0:
         stat_dict = {}
-        for dict in file_stats:
-            if int(dict['size']) > 0:
-                if dict['checksum'] in stat_dict:
-                    stat_dict[dict['checksum']].append(dict['name'])
+        for dctnry in file_stats:
+            if int(dctnry['size']) > 0:
+                if dctnry['checksum'] in stat_dict:
+                    stat_dict[dctnry['checksum']].append(dctnry['name'])
                 else:
-                    stat_dict[dict['checksum']] = [dict['name']]
+                    stat_dict[dctnry['checksum']] = [dctnry['name']]
        
         #go through new dict and find checksums with duplicates
         for chksm in [key for key, values in stat_dict.items() if len(values) > 1]:
@@ -1268,8 +1268,8 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     #next get date information using info pulled from dfxml
     date_info = []
     if len(file_stats) > 0:
-        for dict in file_stats:
-            date_info.append(dict['mtime'])
+        for dctnry in file_stats:
+            date_info.append(dctnry['mtime'])
         
         begin_date = min(date_info)[:4]
         end_date = max(date_info)[:4]
