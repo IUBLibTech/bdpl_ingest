@@ -825,11 +825,21 @@ def main():
                 except IndexError:
                     access_option = '-'
                     
+                coll_title = str(row[2].value)
+                coll_id = str(row[3].value)
+                creator = str(row[4].value)
+                source_type = str(row[6].value)
+                label_transcript = str(row[7].value)
+                appraisal_notes = str(row[8].value)
+                restrict_stmt = str(row[9].value)
+                restrict_end_date = str(row[10].value)
+                migration_date = str(row[12].value)
+                sip_creation_date = str(datetime.datetime.now())
                 earliest_date = str(row[21].value) 
                 latest_date = str(row[22].value)
                 
                 #write information on the specfic barcode
-                rowlist = [barcode, unit, shipmentID, str(row[2].value), str(row[3].value), str(row[4].value), str(row[6].value), str(row[7].value), str(row[8].value), str(row[9].value), earliest_date, latest_date, str(row[10].value), str(row[12].value), str(datetime.datetime.now()), extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename'], access_option]
+                rowlist = [barcode, unit, shipmentID, coll_title, coll_id, creator, source_type, label_transcript, appraisal_notes, earliest_date, latest_date, restrict_stmt, restrict_end_date, migration_date, sip_creation_date, extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename'], access_option]
                 
                 #append list and save
                 item_ws.append(rowlist)   
