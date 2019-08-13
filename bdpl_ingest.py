@@ -273,7 +273,7 @@ def TransferContent():
         teracopy_source = source.get().replace('/', '\\')
         
         if 'bdpl_transfer_lists' in teracopy_source:
-            teracopy_source = glob.glob(os.path.join('Z:\\', '%s.txt' % barcode.get()))
+            teracopy_source = glob.glob(os.path.join('Z:\\bdpl_transfer_lists', '%s.txt' % barcode.get()))
             if len(teracopy_source) != 1:
                 print('\n\nOperation failed: could not find transfer list for this barcode. Please verify the list and try again.')
                 return
@@ -1922,7 +1922,7 @@ def analyzeContent():
         if not os.path.exists(dfxml_output):
             fs_list = pickleLoad('fs_list')
             
-            #if it's an HFS+ file system, we can use fiwalk on the disk image; otherwise, use md5deep on the file directory
+            #if it's an HFS+ file system, we can use fiwalk on the disk image; otherwise, use bdpl_ingest on the file directory
             if 'hfs+' in [fs.lower() for fs in fs_list]:
                 produce_dfxml(imagefile)
             else:
@@ -2375,16 +2375,16 @@ def verify_barcode():
     
     label_transcription.configure(state='normal')
     label_transcription.delete('1.0', END)
-    label_transcription.insert(INSERT, 'LABEL TRANSCRIPTION:\n\n' + bc_dict['label_transcript'])
+    label_transcription.insert(INSERT, 'LABEL TRANSCRIPTION:\n\n%s' % bc_dict['label_transcript'])
     
     bdpl_notes.configure(state='normal')
     bdpl_notes.delete('1.0', END)
-    bdpl_notes.insert(INSERT, "TECHNICIAN NOTES:\n\n" + bc_dict['bdpl_notes'])
+    bdpl_notes.insert(INSERT, "TECHNICIAN NOTES:\n\n%s" % bc_dict['bdpl_notes'])
     bdpl_notes.configure(state='disabled')
     
     appraisal_notes.configure(state='normal')
     appraisal_notes.delete('1.0', END)
-    appraisal_notes.insert(INSERT, "APPRAISAL NOTES:\n\n" + bc_dict['appraisal_notes'])
+    appraisal_notes.insert(INSERT, "APPRAISAL NOTES:\n\n%s" % bc_dict['appraisal_notes'])
     appraisal_notes.configure(state='disabled')
     
     pickleDump('bc_dict', bc_dict)

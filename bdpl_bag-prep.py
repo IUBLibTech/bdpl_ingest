@@ -706,7 +706,7 @@ def main():
             if not check_list(tarred_list, barcode):
                 
                 #Make sure we have enough space to create tar file (just to be sure; we should check first, as a rule)
-                print('\n\tChecking available space..')
+                print('\n\tChecking available space...')
                 
                 #first check available space
                 (total, used, free) = shutil.disk_usage(os.getcwd())
@@ -727,8 +727,12 @@ def main():
                 
                 #tar folder
                 print('\n\tCreating tar archive...')
-                tar_file = '%s.tar' % os.path.basename(target)
-                cmd = 'tar -cf %s %s' % (tar_file, os.path.basename(target))
+                if 'POL' in barcode:
+                    tar_file = '%s.tar.gz' % os.path.basename(target)
+                    cmd = 'tar -czf %s %s' % (tar_file, os.path.basename(target))
+                else:
+                    tar_file = '%s.tar' % os.path.basename(target)
+                    cmd = 'tar -cf %s %s' % (tar_file, os.path.basename(target))
                 
                 try:
                     subprocess.check_output(cmd, shell=True)

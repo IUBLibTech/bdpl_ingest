@@ -1,15 +1,16 @@
 @ECHO OFF
 
-TYPE %2\scripts\bdpl.txt
+TYPE C:\BDPL\scripts\bdpl.txt
 ECHO.
 ECHO.
 ECHO.
 
 if "%1." =="." GOTO No1
-if "%2." =="."  GOTO No2
 
 setlocal EnableDelayedExpansion
 IF NOT EXIST Z: (
+  ECHO Connecting to main BDPL workspace...
+  ECHO.
   REM Get username
   SET /P _username="Enter your IU username: "
 
@@ -20,18 +21,12 @@ IF NOT EXIST Z: (
 )
 
 CLS
-TYPE %2\scripts\bdpl.txt
-python %2\scripts\bdpl_ingest.py
+TYPE C:\BDPL\scripts\bdpl.txt
+python C:\BDPL\scripts\bdpl_ingest.py
 EXIT
 
 :No1
 ECHO Missing server address
-ECHO.
-PAUSE
-EXIT
-
-:No2
-ECHO Missing local directory argument
 ECHO.
 PAUSE
 EXIT

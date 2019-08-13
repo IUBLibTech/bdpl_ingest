@@ -54,7 +54,7 @@ def main():
             barcode = line.split()[0]
             barcode_path = os.path.join(shipment, barcode)
             
-            print('\nWorking on', barcode)
+            print('\nWorking on %s\n\n\tIssue: %s' % (barcode, line.split()[1]))
                         
             #make sure we're dealing with a bagit issue
             if line.split()[1] == 'bagit':            
@@ -128,6 +128,12 @@ def main():
                 if not os.path.exists(barcode_path):
                     failed_status(failed_list, barcode)
                     list_write(cleaned_list, barcode)
+            
+            elif line.split()[1] == 'tar':
+                tar_file = os.path.join(shipment, '%s.tar' % barcode)
+                if os.path.exists(tar_file):
+                    os.remove(tar_file)
+                    
                 
 if __name__ == '__main__':
     main()

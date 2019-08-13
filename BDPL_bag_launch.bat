@@ -1,17 +1,18 @@
 @ECHO OFF
 
-TYPE %3\scripts\bdpl.txt
+TYPE C:\BDPL\scripts\bdpl.txt
 ECHO.
 ECHO.
 ECHO.
 
 if "%1."=="." GOTO No1
 if "%2."=="." GOTO No1
-if "%3."=="."  GOTO No2
 
 
 setlocal EnableDelayedExpansion
 IF NOT EXIST Y: (
+  ECHO Connecting to Archiver Spool location...
+  ECHO.
   REM Get username
   SET /P _username="Enter your IU username: "
 
@@ -23,6 +24,10 @@ IF NOT EXIST Y: (
 
 setlocal EnableDelayedExpansion
 IF NOT EXIST Z: (
+  ECHO.
+  ECHO.
+  ECHO Connecting to main BDPL workspace...
+  ECHO.
   REM Get username
   SET /P _username="Enter your IU username: "
 
@@ -33,7 +38,7 @@ IF NOT EXIST Z: (
 )
 
 CLS
-python %3\scripts\bdpl_bag-prep.py
+python C:\BDPL\scripts\bdpl_bag-prep.py
 ECHO.
 ECHO.
 ECHO.
@@ -42,12 +47,6 @@ EXIT /B
 
 :No1
 ECHO Missing server address
-ECHO.
-PAUSE
-EXIT
-
-:No2
-ECHO Missing local directory argument
 ECHO.
 PAUSE
 EXIT
