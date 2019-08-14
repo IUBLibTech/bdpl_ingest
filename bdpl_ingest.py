@@ -2445,6 +2445,12 @@ def check_progress():
         if not col.value is None:
             inv_list.append(str(col.value))
     
+    #check to see if there are any duplicate barcodes in the inventory; print warning if so
+    duplicate_barcodes = [item for item, count in Counter(inv_list).items() if count > 1]
+    
+    if duplicate_barcodes:
+        print('\n\nWARNING! Inventory contains at least one duplicate barcode:\n\t%s' % '\n\t'.join(duplicate_barcodes))
+    
     current_total = len(inv_list) - len(app_list)
     
     items_not_done = list(set(inv_list) - set(app_list))
@@ -2453,8 +2459,10 @@ def check_progress():
     
     if len(items_not_done) > 0:
         print('\n\nThe following barcodes require ingest:\n%s' % '\n'.join(items_not_done))
-        
-    print('\n\nCurrent status: %s out of %s items have been ingested. \n\n%s remain.' % (len(app_list), len(inv_list), current_total))
+    
+    #reprint total if list is long...
+    if len(items_not_done) > 15:    
+        print('\n\nCurrent status: %s out of %s items have been ingested. \n\n%s remain.' % (len(app_list), len(inv_list), current_total))
 
 
 def move_media_images():
