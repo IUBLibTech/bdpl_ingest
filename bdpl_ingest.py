@@ -772,9 +772,6 @@ def run_antivirus(files_dir, log_dir, metadata):
     timestamp = str(datetime.datetime.now())
     exitcode = subprocess.call(av_command, shell=True, text=True)
     
-    #concatenate log file with antivirus stdout
-    subprocess.call('TYPE %s >> %s' % (win_log, virus_log), shell=True, text=True)
-    
     #write info to appraisal_dict
     appraisal_dict = pickleLoad('appraisal_dict')
         
