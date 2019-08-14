@@ -760,17 +760,14 @@ def run_antivirus(files_dir, log_dir, metadata):
     if check_premis('virus check'):
         return
     
-    print('\n\nVIRUS SCAN: MpCmdRun.exe\n\n')
+    print('\n\nVIRUS SCAN: clamscan.exe\n\n')
+    
+    #get version
+    cmd = 'clamscan -V'
+    av_ver = subprocess.check_output(cmd, text=True).rstrip()
     
     virus_log = os.path.join(log_dir, 'viruscheck-log.txt')
-    
-    #use location of MpCmdRun.log on workstation to set variables to copy log file
-    windir = tempfile.gettempdir()
-    win_log = os.path.join(windir, "MpCmdRun.log")
-    if os.path.exists(win_log):
-        os.remove(win_log)
-    av_command = '"C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 3 -File %s | tee "%s"' % (files_dir, virus_log)
-    
+    av_command = 'clamscan -l %s --recursive %s' % (virus_log, files_dir)
     
     timestamp = str(datetime.datetime.now())
     exitcode = subprocess.call(av_command, shell=True, text=True)
@@ -778,31 +775,11 @@ def run_antivirus(files_dir, log_dir, metadata):
     #concatenate log file with antivirus stdout
     subprocess.call('TYPE %s >> %s' % (win_log, virus_log), shell=True, text=True)
     
-    #Get Antivirus signature, definition, etc.; find file with information, convert to ASCII and get most recent 'version' info
-    cmd = 'powershell "Get-MpComputerStatus"'
-    
-    av_out = subprocess.check_output(cmd, shell=True, text=True).splitlines()
-    
-    for line in av_out:
-        if 'AMProductVersion' in line:
-            _product = line.split(': ')[1]
-        if 'AMServiceVersion' in line:
-            _service = line.split(': ')[1]
-        if 'AMEngineVersion' in line:
-            _engine = line.split(': ')[1]
-        if 'AntispywareSignatureVersion' in line:
-            _as = line.split(': ')[1]
-        if 'AntivirusSignatureVersion' in line:
-            _av = line.split(': ')[1]
-            
-    av_ver = 'Windows Defender MpCmdRun.exe Product %s Service %s Engine %s AS %s AV %s' % (_product, _service, _engine, _as, _av)
-    
-    
     #write info to appraisal_dict
     appraisal_dict = pickleLoad('appraisal_dict')
         
     with open(virus_log, 'r') as f:
-        if "found no threats" not in f.read():
+        if "Infected files: 0" not in f.read():
             appraisal_dict['Virus'] = 'WARNING! Virus or malware found; see %s.' % virus_log
         
         else:
@@ -2258,10 +2235,6 @@ def closeUp():
     except (NameError, sqlite3.ProgrammingError) as e:
         pass
     
-    #make sure siegfried is up to date
-    sfup = 'sf -update'
-    subprocess.call(sfup, shell=True, text=True)
-    
     window.destroy()
 
 def verify_data(check=None):
@@ -2541,6 +2514,20 @@ def main():
     
     home_dir = 'Z:\\'
     bdpl_home = 'C:\\BDPL'
+    
+    #make sure PRONOM and antivirus signatures are up to date
+    clam_sig = "C:/BDPL/resources/clamav/database/daily.cvd" 
+    file_mod_time = datetime.datetime.fromtimestamp(os.stat(clam_sig).st_mtime).strftime('%Y%m%d')
+    now = datetime.datetime.today().strftime('%Y%m%d')
+    
+    #if signature is older than today, run updates
+    if now > file_mod_time:  
+        print('\n\nUpdating PRONOM and antivirus signatures...')
+        sfup = 'sf -update'
+        fresh_up = 'freshclam'
+        
+        subprocess.check_output(sfup, shell=True, text=True)
+        subprocess.check_output(fresh_up, shell=True, text=True)
     
     window = Tk()
     window.title("Indiana University Library Born-Digital Preservation Lab")
