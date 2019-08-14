@@ -79,6 +79,10 @@ def main():
                 #look to see if there is a temp folder created by tempfile.mkdtemp
                 tempdir = [d for d in os.listdir(barcode_path) if d[:3] == 'tmp' and len(d) == 11]
                 
+                #if no 'tmp...' folder exists, check to see if a 'data' folder was created
+                if not tempdir:
+                    tempdir = [d for d in os.listdir(barcode_path) if d == 'data']
+                
                 #if there is such a folder, we need to move anything in it  back to the main barcode folder
                 if tempdir:
                 
