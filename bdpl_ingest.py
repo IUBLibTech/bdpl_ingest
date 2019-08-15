@@ -767,7 +767,7 @@ def run_antivirus(files_dir, log_dir, metadata):
     av_ver = subprocess.check_output(cmd, text=True).rstrip()
     
     virus_log = os.path.join(log_dir, 'viruscheck-log.txt')
-    av_command = 'clamscan -l %s --recursive %s' % (virus_log, files_dir)
+    av_command = 'clamscan -i -l %s --recursive %s' % (virus_log, files_dir)
     
     timestamp = str(datetime.datetime.now())
     exitcode = subprocess.call(av_command, shell=True, text=True)
