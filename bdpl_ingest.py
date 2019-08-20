@@ -760,7 +760,7 @@ def run_antivirus(files_dir, log_dir, metadata):
     if check_premis('virus check'):
         return
     
-    print('\n\nVIRUS SCAN: clamscan.exe\n\n')
+    print('\nVIRUS SCAN: clamscan.exe')
     
     #get version
     cmd = 'clamscan -V'
@@ -820,7 +820,7 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
         be_ver = e.output
        
     premis_list = pickleLoad('premis_list')       
-    premis_list.append(premis_dict(timestamp, 'Sensitive data scan', exitcode, bulkext_command, 'Scanned files for potentially sensitive information, including Social Security and credit card numbers.', be_ver))
+    premis_list.append(premis_dict(timestamp, 'sensitive data scan', exitcode, bulkext_command, 'Scanned files for potentially sensitive information, including Social Security and credit card numbers.', be_ver))
     pickleDump('premis_list', premis_list)
     
     #create a cumulative BE report
@@ -2521,18 +2521,31 @@ def main():
     bdpl_home = 'C:\\BDPL'
     
     #make sure PRONOM and antivirus signatures are up to date
-    clam_sig = "C:/BDPL/resources/clamav/database/daily.cvd" 
+    sfup = 'sf -update'
+    fresh_up = 'freshclam'
+    
+    clam_sig1 = "C:/BDPL/resources/clamav/database/daily.cvd" 
+    clam_sig2 = "C:/BDPL/resources/clamav/database/daily.cld"
+    
+    if os.path.exists(clam_sig1):
+        clam_sig = clam_sig1
+    elif os.path.exists(clam_sig2):
+        clam_sig = clam_sig2
+    else:
+        subprocess.check_output(fresh_up, shell=True, text=True)
+        clam_sig = "C:/BDPL/resources/clamav/database/daily.cvd"
+        
     file_mod_time = datetime.datetime.fromtimestamp(os.stat(clam_sig).st_mtime).strftime('%Y%m%d')
     now = datetime.datetime.today().strftime('%Y%m%d')
     
     #if signature is older than today, run updates
     if now > file_mod_time:  
         print('\n\nUpdating PRONOM and antivirus signatures...')
-        sfup = 'sf -update'
-        fresh_up = 'freshclam'
         
         subprocess.check_output(sfup, shell=True, text=True)
         subprocess.check_output(fresh_up, shell=True, text=True)
+        
+        print('\nUpdate complete!  Time to ingest some date...')
     
     window = Tk()
     window.title("Indiana University Library Born-Digital Preservation Lab")
