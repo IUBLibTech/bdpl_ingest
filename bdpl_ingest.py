@@ -42,15 +42,38 @@ import hashlib
 # from dfxml project
 import Objects
 
-def check_premis(term):
+def check_premis(term, version, command):
     #check to see if an event is already in our premis list--i.e., it's been successfully completed.
- 
+    
     #set up premis_list
     premis_list = pickleLoad('premis_list')
     
+    
+    
+    premis_path = os.path.join(bdpl_vars()['metadata'], '%s-premis.xml' % barcode.get())
+    
+    if os.path.exists(premis_path):
+        PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
+        NSMAP = {'premis' : PREMIS_NAMESPACE, "xsi": "http://www.w3.org/2001/XMLSchema-instance"}
+        parser = etree.XMLParser(remove_blank_text=True)
+        tree = etree.parse(premis_path, parser=parser)
+        root = tree.getroot()
+        events = tree.xpath("//premis:event", namespaces=NSMAP)
+        
+        for e in events:
+            temp_dict = {}
+            temp_dict['eventType'] = e.findtext('./premis:eventType', namespaces=NSMAP)
+            temp_dict['eventOutcomeDetail'] = e.findtext('./premis:eventOutcomeInformation/premis:eventOutcome', namespaces=NSMAP)
+            temp_dict['timestamp'] = e.findtext('./premis:eventDateTime', namespaces=NSMAP)
+            temp_dict['eventDetailInfo'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[0].text
+            temp_dict['eventDetailInfo_additional'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[1].text
+            temp_dict['linkingAgentIDvalue'] = e.findall('./premis:linkingAgentIdentifier/premis:linkingAgentIdentifierValue', namespaces=NSMAP)[1].text
+            premis_list.append(temp_dict)
+    
     for dic in premis_list:
-        if dic['eventType'] == term and dic['eventOutcomeDetail'] == 0:
-            return True
+        if dic['eventType'] == term and dic['eventDetailInfo'] == command and dic['linkingAgentIDvalue'] == version:
+            if  dic['eventOutcomeDetail'] == '0' or dic['eventOutcomeDetail'] == 0:
+                return True
         else:
             continue
     
@@ -755,11 +778,6 @@ def fix_dates(files_dir, dfxml_output):
     pickleDump('premis_list', premis_list)
 
 def run_antivirus(files_dir, log_dir, metadata):
-    
-    #return if virus scan already run
-    if check_premis('virus check'):
-        return
-    
     print('\nVIRUS SCAN: clamscan.exe')
     
     #get version
@@ -768,6 +786,12 @@ def run_antivirus(files_dir, log_dir, metadata):
     
     virus_log = os.path.join(log_dir, 'viruscheck-log.txt')
     av_command = 'clamscan -i -l %s --recursive %s' % (virus_log, files_dir)
+    
+    #return if virus scan already run
+    if check_premis('virus check', av_ver, av_command):
+        print('\nVirus scan already completed.  Proceeding to next operation...')
+        return
+    
     
     timestamp = str(datetime.datetime.now())
     exitcode = subprocess.call(av_command, shell=True, text=True)
@@ -794,8 +818,18 @@ def run_antivirus(files_dir, log_dir, metadata):
 def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
     print('\n\nSENSITIVE DATA SCAN: BULK_EXTRACTOR')
     
+    #get bulk extractor version for premis
+    try:
+        be_ver = subprocess.check_output(['bulk_extractor', '-V'], shell=True, text=True).rstrip()
+    except subprocess.CalledProcessError as e:
+        be_ver = e.output.rstrip()
+        
+    #use default command with buklk_extractor; individuak could implement changes to use 'find' scanner at a later date
+    bulkext_command = 'bulk_extractor -x aes -x base64 -x elf -x exif -x gps -x hiberfile -x httplogs -x json -x kml -x net -x pdf -x sqlite -x winlnk -x winpe -x winprefetch -S ssn_mode=2 -o "%s" -R "%s" > "%s"' % (bulkext_dir, files_dir, bulkext_log)
+    
+    
     #return if b_e was run before
-    if check_premis('Sensitive data scan'):
+    if check_premis('sensitive data scan', be_ver, bulkext_command):
         print('\n\nSensitive data scan already completed.')
         return
     
@@ -805,19 +839,10 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
         if exception.errno != errno.EEXIST:
             raise
 
-    #use default command with buklk_extractor; individuak could implement changes to use 'find' scanner at a later date
-    bulkext_command = 'bulk_extractor -x aes -x base64 -x elf -x exif -x gps -x hiberfile -x httplogs -x json -x kml -x net -x pdf -x sqlite -x winlnk -x winpe -x winprefetch -S ssn_mode=2 -o "%s" -R "%s" > "%s"' % (bulkext_dir, files_dir, bulkext_log)
-
     #create timestamp
     timestamp = str(datetime.datetime.now())        
 
     exitcode = subprocess.call(bulkext_command, shell=True, text=True)
-    
-    #get bulk extractor version for premis
-    try:
-        be_ver = subprocess.check_output(['bulk_extractor', '-V'], shell=True, text=True).rstrip()
-    except subprocess.CalledProcessError as e:
-        be_ver = e.output
        
     premis_list = pickleLoad('premis_list')       
     premis_list.append(premis_dict(timestamp, 'sensitive data scan', exitcode, bulkext_command, 'Scanned files for potentially sensitive information, including Social Security and credit card numbers.', be_ver))
@@ -846,37 +871,14 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
         except OSError:
             continue
 
-def run_siegfried(files_dir, reports_dir, siegfried_version):
-
-    print('\nFile format identification with siegfried...')
-    """Run siegfried on directory"""  
-    sf_file = os.path.join(reports_dir, 'siegfried.csv')
-    sf_command = 'sf -z -csv "%s" > "%s"' % (files_dir, sf_file)
-    
-    #create timestamp
-    timestamp = str(datetime.datetime.now())
-    
-    if os.path.exists(sf_file):
-        os.remove(sf_file)                                                                 
-    
-    exitcode = subprocess.call(sf_command, shell=True, text=True)
-    
-    premis_list = pickleLoad('premis_list')
-    
-    premis_list.append(premis_dict(timestamp, 'format identification', exitcode, sf_command, 'Determined file format and version numbers for content recorded in the PRONOM format registry.', siegfried_version))
-    
-    pickleDump('premis_list', premis_list)
-
 def import_csv(cursor, conn, reports_dir):
 
     print('\nImporting siegried file to sqlite3 database...')
     """Import csv file into sqlite db"""
     sf_file = os.path.join(reports_dir, 'siegfried.csv')
     
-    if (sys.version_info > (3, 0)):
-        f = open(sf_file, 'r', encoding='utf8')
-    else:
-        f = open(sf_file, 'r')
+    f = open(sf_file, 'r', encoding='utf8')
+    
     try:
         reader = csv.reader(x.replace('\0', '') for x in f) # replace null bytes with empty strings on read
     except UnicodeDecodeError:
@@ -1452,6 +1454,7 @@ def print_premis(premis_path):
                 eventOutcome.text = str(entry['eventOutcomeDetail'])
                 eventOutDetail = etree.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcomeDetail')
                 eventOutDetailNote = etree.SubElement(eventOutDetail, PREMIS + 'eventOutcomeDetailNote')
+                
                 if entry['eventOutcomeDetail'] == '0':
                     eventOutDetailNote.text = 'Successful completion'
                 elif entry['eventOutcomeDetail'] == 0:
@@ -1582,15 +1585,12 @@ def checkFiles(some_dir):
         return False
     
     #make sure there are files in the 'files' directory
-    filecounter = 0
     for dirpath, dirnames, contents in os.walk(some_dir):
-        for f in contents:
-            filecounter += 1
-    if filecounter == 0:
-        print('\n\nError; no files located at %s. Check settings and run again; you may need to manually copy or extract files.' % some_dir)
-        return False
-    else:
-        return True
+        if len(contents) > 0:
+            return True
+            
+    print('\n\nError; no files located at %s. Check settings and run again; you may need to manually copy or extract files.' % some_dir)
+    return False
 
 def md5(fname):
     hash_md5 = hashlib.md5()
@@ -1603,10 +1603,6 @@ def produce_dfxml(target):
     dfxml_output = bdpl_vars()['dfxml_output']
     temp_dir = bdpl_vars()['temp_dir']
     
-    #check if the output file exists AND if the action was recorded in PREMIS; if so, return
-    if os.path.exists(dfxml_output) and check_premis('message digest calculation'):
-        return
-    
     timestamp = str(datetime.datetime.now())
     
     #use fiwalk if we have an image file
@@ -1616,6 +1612,12 @@ def produce_dfxml(target):
         dfxml_ver = subprocess.check_output(dfxml_ver_cmd, shell=True, text=True).splitlines()[0]
         
         dfxml_cmd = 'fiwalk-0.6.3 -x %s > %s' % (target, dfxml_output)
+        
+        #check if the output file exists AND if the action was recorded in PREMIS; if so, return
+        if check_premis('message digest calculation', dfxml_ver, dfxml_cmd):
+            print('\nDFXML already created.  Proceeding to next operation...')
+            return
+        
         exitcode = subprocess.call(dfxml_cmd, shell=True, text=True)
                 
         #for jobs other than DVD, parse dfxml to get info for later...
@@ -1644,9 +1646,15 @@ def produce_dfxml(target):
     elif os.path.isdir(target):
         print('\n\nDIGITAL FORENSICS XML CREATION: bdpl_ingest')
         
-        temp_dfxml = os.path.join(temp_dir, 'temp_dfxml.txt')
+        dfxml_ver = 'https://github.com/IUBLibTech/bdpl_ingest'
+        dfxml_cmd = 'bdpl_ingest.py'
+        
+        if check_premis('message digest calculation', dfxml_ver, dfxml_cmd):
+            print('\nDFXML already created.  Proceeding to next operation...')
+            return
         
         timestamp = str(datetime.datetime.now().isoformat())
+        temp_dfxml = os.path.join(temp_dir, 'temp_dfxml.txt')
         
         #this will create an empty list or, if we've previously crashed or been stopped, will load any info previously stored
         file_stats = pickleLoad('temp_dfxml')
@@ -1738,7 +1746,7 @@ def produce_dfxml(target):
     
     #save PREMIS
     premis_list = pickleLoad('premis_list')        
-    premis_list.append(premis_dict(timestamp, 'message digest calculation', 0, 'bdpl_ingest.py', 'Extracted information about the structure and characteristics of content, including file checksums.', 'https://github.com/IUBLibTech/bdpl_ingest'))
+    premis_list.append(premis_dict(timestamp, 'message digest calculation', 0, dfxml_cmd, 'Extracted information about the structure and characteristics of content, including file checksums.', dfxml_ver))
     pickleDump('premis_list', premis_list)
 
 def optical_drive_letter():
@@ -1832,8 +1840,30 @@ def format_analysis(files_dir, reports_dir, log_dir, metadata, html):
     sfcmd = 'sf -version'
     siegfried_version = subprocess.check_output(sfcmd, shell=True, text=True).replace('\n', ' ')
     
-    if not check_premis('format identification'):
-        run_siegfried(files_dir, reports_dir, siegfried_version) # run siegfried
+    sf_file = os.path.join(reports_dir, 'siegfried.csv')
+    sf_command = 'sf -z -csv "%s" > "%s"' % (files_dir, sf_file)
+    
+    #make sure we haven't already run this...
+    if not check_premis('format identification', siegfried_version, sf_command):
+        
+        #make sure that there are actually files here
+        if checkFiles(files_dir):
+            
+            print('\nFile format identification with siegfried...') 
+        
+            #create timestamp
+            timestamp = str(datetime.datetime.now())
+            
+            if os.path.exists(sf_file):
+                os.remove(sf_file)                                                                 
+            
+            exitcode = subprocess.call(sf_command, shell=True, text=True)
+            
+            premis_list = pickleLoad('premis_list')
+            
+            premis_list.append(premis_dict(timestamp, 'format identification', exitcode, sf_command, 'Determined file format and version numbers for content recorded in the PRONOM format registry.', siegfried_version))
+            
+            pickleDump('premis_list', premis_list)
 
     import_csv(cursor, conn, reports_dir) # load csv into sqlite db
     get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_dir, log_dir) # get aggregate stats and write to html file
@@ -1990,12 +2020,6 @@ def analyzeContent():
     
     print('\n\n')
     
-    #delete temp folder
-    try:
-        shutil.rmtree(temp_dir)
-    except (WindowsError, PermissionError) as e:
-        print('\n\nUnable to delete temp folder: %s' % e)
-    
     #delete disk image folder if empty
     try:
         os.rmdir(image_dir)
@@ -2104,6 +2128,26 @@ def writeSpreadsheet():
     ship_dir = bdpl_vars()['ship_dir']
     
     premis_list = pickleLoad('premis_list')
+    
+    #check to see if we already have a premis file
+    premis_path = os.path.join(bdpl_vars()['metadata'], '%s-premis.xml' % barcode.get())
+    if os.path.exists(premis_path):
+        PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
+        NSMAP = {'premis' : PREMIS_NAMESPACE, "xsi": "http://www.w3.org/2001/XMLSchema-instance"}
+        parser = etree.XMLParser(remove_blank_text=True)
+        tree = etree.parse(premis_path, parser=parser)
+        root = tree.getroot()
+        events = tree.xpath("//premis:event", namespaces=NSMAP)
+        
+        for e in events:
+            temp_dict = {}
+            temp_dict['eventType'] = e.findtext('./premis:eventType', namespaces=NSMAP)
+            temp_dict['eventOutcomeDetail'] = e.findtext('./premis:eventOutcomeInformation/premis:eventOutcome', namespaces=NSMAP)
+            temp_dict['timestamp'] = e.findtext('./premis:eventDateTime', namespaces=NSMAP)
+            temp_dict['eventDetailInfo'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[0].text
+            temp_dict['eventDetailInfo_additional'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[1].text
+            temp_dict['linkingAgentIDvalue'] = e.findall('./premis:linkingAgentIdentifier/premis:linkingAgentIdentifierValue', namespaces=NSMAP)[1].text
+            premis_list.append(temp_dict)
             
     bc_dict = pickleLoad('bc_dict')
     
@@ -2134,12 +2178,10 @@ def writeSpreadsheet():
     
     #pull in other information about transfer: timestamp, method, outcome
     temp_dict = {}
-    if check_premis('disk image creation'):
+    if [f['eventType'] for f in premis_list if f['eventType'] == 'disk image creation']:
         writePremisToExcel(ws, newrow, 'disk image creation', premis_list)
-    elif check_premis('replication'):
-        writePremisToExcel(ws, newrow, 'replication', premis_list)
     else:
-        pass
+        writePremisToExcel(ws, newrow, 'replication', premis_list)
     
     #write technician's note
     ws.cell(row=newrow, column=15, value = noteField.get(1.0, END))
@@ -2155,7 +2197,8 @@ def writeSpreadsheet():
     ws.cell(row=newrow, column=21, value = appraisal_dict['Formats'])
     ws.cell(row=newrow, column=22, value = appraisal_dict['begin_date'])
     ws.cell(row=newrow, column=23, value = appraisal_dict['end_date'])
-    ws.cell(row=newrow, column=24, value =  appraisal_dict['Virus'])
+    if 'Virus' in appraisal_dict:
+        ws.cell(row=newrow, column=24, value =  appraisal_dict['Virus'])
     if 'PII' in appraisal_dict:
         ws.cell(row=newrow, column=25, value = appraisal_dict['PII'])
         
@@ -2177,7 +2220,6 @@ def writeSpreadsheet():
 def cleanUp():
     
     newscreen()
-    
     
     #deselect all radio buttons
     jobType1.deselect()

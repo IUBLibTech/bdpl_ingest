@@ -51,12 +51,16 @@ def main():
         
         if os.path.exists(target):
             break
-
+    
+    barcode = os.path.basename(target)
+    
     temp_dir = os.path.join(target, 'temp')
     if not os.path.exists(temp_dir):
         os.mkdir(temp_dir)
     
     temp_file = os.path.join(temp_dir, 'premis_list.txt')
+    
+    premis_path = os.path.join(target, 'metadata', '%s-premis.xml' % barcode)
     
     premis_list = []
     if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
