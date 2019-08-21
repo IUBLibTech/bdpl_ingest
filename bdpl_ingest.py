@@ -48,28 +48,6 @@ def check_premis(term, version, command):
     #set up premis_list
     premis_list = pickleLoad('premis_list')
     
-    
-    
-    premis_path = os.path.join(bdpl_vars()['metadata'], '%s-premis.xml' % barcode.get())
-    
-    if os.path.exists(premis_path):
-        PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
-        NSMAP = {'premis' : PREMIS_NAMESPACE, "xsi": "http://www.w3.org/2001/XMLSchema-instance"}
-        parser = etree.XMLParser(remove_blank_text=True)
-        tree = etree.parse(premis_path, parser=parser)
-        root = tree.getroot()
-        events = tree.xpath("//premis:event", namespaces=NSMAP)
-        
-        for e in events:
-            temp_dict = {}
-            temp_dict['eventType'] = e.findtext('./premis:eventType', namespaces=NSMAP)
-            temp_dict['eventOutcomeDetail'] = e.findtext('./premis:eventOutcomeInformation/premis:eventOutcome', namespaces=NSMAP)
-            temp_dict['timestamp'] = e.findtext('./premis:eventDateTime', namespaces=NSMAP)
-            temp_dict['eventDetailInfo'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[0].text
-            temp_dict['eventDetailInfo_additional'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[1].text
-            temp_dict['linkingAgentIDvalue'] = e.findall('./premis:linkingAgentIdentifier/premis:linkingAgentIdentifierValue', namespaces=NSMAP)[1].text
-            premis_list.append(temp_dict)
-    
     for dic in premis_list:
         if dic['eventType'] == term and dic['eventDetailInfo'] == command and dic['linkingAgentIDvalue'] == version:
             if  dic['eventOutcomeDetail'] == '0' or dic['eventOutcomeDetail'] == 0:
@@ -122,19 +100,66 @@ def bdpl_vars():
     return vars
     
 def pickleLoad(list_name):
-    temp_file = os.path.join(bdpl_vars()['temp_dir'], '%s.txt' % list_name)
+    metadata = bdpl_vars()['metadata']
+    temp_dir = bdpl_vars()['temp_dir']
+    temp_file = os.path.join(temp_dir, '%s.txt' % list_name)
+    
+    #this list will be used to store anything pulled in from premis xml; we'll check later to see if anything was added
+    temp_premis = []
+    
+    #special steps if we're dealing with a premis list...
     if list_name == "premis_list":
         temp_list = []
+        
+        premis_path = os.path.join(metadata, '%s-premis.xml' % barcode.get())
+        premis_xml_included = os.path.join(temp_dir, 'premis_xml_included.txt')
+        
+        #for our list of premis events, we want to pull in information that may have already been written to premis xml
+        if os.path.exists(premis_path):
+            
+            #check to see if operation has already been completed (we'll write an empty file once we've done so)
+            if not os.path.exists(premis_xml_included):
+                PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
+                NSMAP = {'premis' : PREMIS_NAMESPACE, "xsi": "http://www.w3.org/2001/XMLSchema-instance"}
+                parser = etree.XMLParser(remove_blank_text=True)
+                tree = etree.parse(premis_path, parser=parser)
+                root = tree.getroot()
+                events = tree.xpath("//premis:event", namespaces=NSMAP)
+                
+                for e in events:
+                    temp_dict = {}
+                    temp_dict['eventType'] = e.findtext('./premis:eventType', namespaces=NSMAP)
+                    temp_dict['eventOutcomeDetail'] = e.findtext('./premis:eventOutcomeInformation/premis:eventOutcome', namespaces=NSMAP)
+                    temp_dict['timestamp'] = e.findtext('./premis:eventDateTime', namespaces=NSMAP)
+                    temp_dict['eventDetailInfo'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[0].text
+                    temp_dict['eventDetailInfo_additional'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[1].text
+                    temp_dict['linkingAgentIDvalue'] = e.findall('./premis:linkingAgentIdentifier/premis:linkingAgentIdentifierValue', namespaces=NSMAP)[1].text
+                    temp_premis.append(temp_dict)
+                    
+                #now create our premis_xml_included.txt file so we don't go through this again.
+                open(premis_xml_included, 'a').close()
+        
     elif list_name == 'temp_dfxml':
         temp_list = []
     elif list_name == 'duplicates':
         temp_list = []
     else:
         temp_list = {}
+        
     #make sure there's something in the file
     if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
         with open(temp_file, 'rb') as file:
             temp_list = pickle.load(file)
+    
+    #if anything was added from our premix.xml file, 
+    if len(temp_premis) > 0:
+        for d in temp_premis:
+            if not d in temp_list:
+                temp_list.append(d)
+        
+        #now sort based on ['timestamp']
+        temp_list.sort(key=lambda x:x['timestamp'])
+            
     return temp_list
 
 def pickleDump(list_name, list_contents):
@@ -173,7 +198,7 @@ def secureCopy(file_source, file_destination):
     
     #check to see if files are actually present (TeraCopy may complete without copying...)
     if not checkFiles(file_destination):
-        return
+        exitcode = '1'
     
     #need to find Teracopy SQLITE db and export list of copied files to csv log file
     list_of_files = glob.glob(os.path.join(os.path.expandvars('C:\\Users\%USERNAME%\AppData\Roaming\TeraCopy\History'), '*'))
@@ -788,7 +813,7 @@ def run_antivirus(files_dir, log_dir, metadata):
     av_command = 'clamscan -i -l %s --recursive %s' % (virus_log, files_dir)
     
     #return if virus scan already run
-    if check_premis('virus check', av_ver, av_command):
+    if check_premis('virus check', av_ver, av_command) and re_analyze.get() == False:
         print('\nVirus scan already completed.  Proceeding to next operation...')
         return
     
@@ -829,9 +854,12 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
     
     
     #return if b_e was run before
-    if check_premis('sensitive data scan', be_ver, bulkext_command):
+    if check_premis('sensitive data scan', be_ver, bulkext_command) and re_analyze.get() == False:
         print('\n\nSensitive data scan already completed.')
         return
+    
+    if os.path.exists(bulkext_dir):
+        shutil.rmtree(bulkext_dir)
     
     try:
         os.makedirs(bulkext_dir)
@@ -850,6 +878,9 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
     
     #create a cumulative BE report
     cumulative_report = os.path.join(bulkext_dir, 'cumulative.txt')
+    if os.path.exists(cumulative_report):
+        os.remove(cumulative_report)
+        
     for myfile in ('pii.txt', 'ccn.txt', 'email.txt', 'telephone.txt', 'find.txt'):
         myfile = os.path.join(bulkext_dir, myfile)
         if os.path.exists(myfile) and os.stat(myfile).st_size > 0:
@@ -970,13 +1001,10 @@ def sqlite_to_csv(sql, path, header, cursor):
 
 def write_pronom_links(old_file, new_file):
     """Use regex to replace fmt/# and x-fmt/# PUIDs with link to appropriate PRONOM page"""
-    
-    if (sys.version_info > (3, 0)):
-        in_file = open(old_file, 'r', encoding='utf8')
-        out_file = open(new_file, 'w', encoding='utf8')
-    else:
-        in_file = open(old_file, 'r')
-        out_file = open(new_file, 'w')
+
+    in_file = open(old_file, 'r', encoding='utf8')
+    out_file = open(new_file, 'w', encoding='utf8')
+
 
     for line in in_file:
         regex = r"fmt\/[0-9]+|x\-fmt\/[0-9]+" #regex to match fmt/# or x-fmt/#
@@ -1408,175 +1436,92 @@ def print_premis(premis_path):
 
     events = []
     
-    #if our premis file already exists, we'll just add new events to it.
+    #if our premis file already exists, we'll just delete it and write a new one
     if os.path.exists(premis_path):
+        os.remove(premis_path)
+        
+    root = etree.Element(PREMIS + 'premis', {attr_qname: "http://www.loc.gov/premis/v3 https://www.loc.gov/standards/premis/premis.xsd"}, version="3.0", nsmap=NSMAP)
     
-        parser = etree.XMLParser(remove_blank_text=True)
-                                
-        tree = etree.parse(premis_path, parser=parser)
-        root = tree.getroot()
+    object = etree.SubElement(root, PREMIS + 'object', attrib={etree.QName(NSMAP['xsi'], 'type'): 'premis:file'})
+    objectIdentifier = etree.SubElement(object, PREMIS + 'objectIdentifier')
+    objectIdentifierType = etree.SubElement(objectIdentifier, PREMIS + 'objectIdentifierType')
+    objectIdentifierType.text = 'local'
+    objectIdentifierValue = etree.SubElement(objectIdentifier, PREMIS + 'objectIdentifierValue')
+    objectIdentifierValue.text = barcode.get()
+    objectCharacteristics = etree.SubElement(object, PREMIS + 'objectCharacteristics')
+    compositionLevel = etree.SubElement(objectCharacteristics, PREMIS + 'compositionLevel')
+    compositionLevel.text = '0'
+    format = etree.SubElement(objectCharacteristics, PREMIS + 'format')
+    formatDesignation = etree.SubElement(format, PREMIS + 'formatDesignation')
+    formatName = etree.SubElement(formatDesignation, PREMIS + 'formatName')
+    formatName.text = 'Tape Archive Format'
+    formatRegistry = etree.SubElement(format, PREMIS + 'formatRegistry')
+    formatRegistryName = etree.SubElement(formatRegistry, PREMIS + 'formatRegistryName')
+    formatRegistryName.text = 'PRONOM'
+    formatRegistryKey = etree.SubElement(formatRegistry, PREMIS + 'formatRegistryKey')
+    formatRegistryKey.text = 'x-fmt/265' 
+
+    for entry in premis_list:
+        event = etree.SubElement(root, PREMIS + 'event')
+        eventID = etree.SubElement(event, PREMIS + 'eventIdentifier')
+        eventIDtype = etree.SubElement(eventID, PREMIS + 'eventIdentifierType')
+        eventIDtype.text = 'UUID'
+        eventIDval = etree.SubElement(eventID, PREMIS + 'eventIdentifierValue')
+        eventIDval.text = str(uuid.uuid4())
+
+        eventType = etree.SubElement(event, PREMIS + 'eventType')
+        eventType.text = entry['eventType']
+
+        eventDateTime = etree.SubElement(event, PREMIS + 'eventDateTime')
+        eventDateTime.text = entry['timestamp']
+
+        eventDetailInfo = etree.SubElement(event, PREMIS + 'eventDetailInformation')
+        eventDetail = etree.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
+        eventDetail.text = entry['eventDetailInfo']
         
-        events = tree.xpath("//premis:event", namespaces=NSMAP)
-        
-        #loop through the list of premis events
-        for entry in premis_list:
-            
-            #if the event has not been recorded, then add it to the premis file
-            if len([e for e in events if e.findtext('./premis:eventType', namespaces=NSMAP) == entry['eventType'] and e.findtext('./premis:eventOutcomeInformation/premis:eventOutcome', namespaces=NSMAP) == '0']) == 0:
-                
-                event = etree.SubElement(root, PREMIS + 'event')
-                eventID = etree.SubElement(event, PREMIS + 'eventIdentifier')
-                eventIDtype = etree.SubElement(eventID, PREMIS + 'eventIdentifierType')
-                eventIDtype.text = 'UUID'
-                eventIDval = etree.SubElement(eventID, PREMIS + 'eventIdentifierValue')
-                eventIDval.text = str(uuid.uuid4())
-
-                eventType = etree.SubElement(event, PREMIS + 'eventType')
-                eventType.text = entry['eventType']
-
-                eventDateTime = etree.SubElement(event, PREMIS + 'eventDateTime')
-                eventDateTime.text = entry['timestamp']
-
-                eventDetailInfo = etree.SubElement(event, PREMIS + 'eventDetailInformation')
-                eventDetail = etree.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
-                eventDetail.text = entry['eventDetailInfo']
-                
-                #include additional eventDetailInfo to clarify action; older transfers may not include this element, so skip if KeyError
-                try:
-                    eventDetailInfo = etree.SubElement(event, PREMIS + 'eventDetailInformation')
-                    eventDetail = etree.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
-                    eventDetail.text = entry['eventDetailInfo_additional']
-                except KeyError:
-                    pass
-                    
-                eventOutcomeInfo = etree.SubElement(event, PREMIS + 'eventOutcomeInformation')
-                eventOutcome = etree.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcome')
-                eventOutcome.text = str(entry['eventOutcomeDetail'])
-                eventOutDetail = etree.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcomeDetail')
-                eventOutDetailNote = etree.SubElement(eventOutDetail, PREMIS + 'eventOutcomeDetailNote')
-                
-                if entry['eventOutcomeDetail'] == '0':
-                    eventOutDetailNote.text = 'Successful completion'
-                elif entry['eventOutcomeDetail'] == 0:
-                    eventOutDetailNote.text = 'Successful completion'
-                else:
-                    eventOutDetailNote.text = 'Unsuccessful completion; refer to logs.'
-
-                linkingAgentID = etree.SubElement(event, PREMIS + 'linkingAgentIdentifier')
-                linkingAgentIDtype = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
-                linkingAgentIDtype.text = 'local'
-                linkingAgentIDvalue = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
-                linkingAgentIDvalue.text = 'IUL BDPL'
-                linkingAgentRole = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
-                linkingAgentRole.text = 'implementer'
-                linkingAgentID = etree.SubElement(event, PREMIS + 'linkingAgentIdentifier')
-                linkingAgentIDtype = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
-                linkingAgentIDtype.text = 'local'
-                linkingAgentIDvalue = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
-                linkingAgentIDvalue.text = entry['linkingAgentIDvalue']
-                linkingAgentRole = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
-                linkingAgentRole.text = 'executing software'
-                linkingObjectID = etree.SubElement(event, PREMIS + 'linkingObjectIdentifier')
-                linkingObjectIDtype = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierType')
-                linkingObjectIDtype.text = 'local'
-                linkingObjectIDvalue = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierValue')
-                linkingObjectIDvalue.text = barcode.get()
-                
-                root.append(event)
-            
-            else:
-                continue
-                
-        premis_text = etree.tostring(tree, pretty_print=True, xml_declaration=True, encoding="UTF-8")
-                                
-        #now write to file
-        with open(premis_path, 'wb') as f:
-            f.write(premis_text)
-            
-    else:
-        
-        root = etree.Element(PREMIS + 'premis', {attr_qname: "http://www.loc.gov/premis/v3 https://www.loc.gov/standards/premis/premis.xsd"}, version="3.0", nsmap=NSMAP)
-        
-        object = etree.SubElement(root, PREMIS + 'object', attrib={etree.QName(NSMAP['xsi'], 'type'): 'premis:file'})
-        objectIdentifier = etree.SubElement(object, PREMIS + 'objectIdentifier')
-        objectIdentifierType = etree.SubElement(objectIdentifier, PREMIS + 'objectIdentifierType')
-        objectIdentifierType.text = 'local'
-        objectIdentifierValue = etree.SubElement(objectIdentifier, PREMIS + 'objectIdentifierValue')
-        objectIdentifierValue.text = barcode.get()
-        objectCharacteristics = etree.SubElement(object, PREMIS + 'objectCharacteristics')
-        compositionLevel = etree.SubElement(objectCharacteristics, PREMIS + 'compositionLevel')
-        compositionLevel.text = '0'
-        format = etree.SubElement(objectCharacteristics, PREMIS + 'format')
-        formatDesignation = etree.SubElement(format, PREMIS + 'formatDesignation')
-        formatName = etree.SubElement(formatDesignation, PREMIS + 'formatName')
-        formatName.text = 'Tape Archive Format'
-        formatRegistry = etree.SubElement(format, PREMIS + 'formatRegistry')
-        formatRegistryName = etree.SubElement(formatRegistry, PREMIS + 'formatRegistryName')
-        formatRegistryName.text = 'PRONOM'
-        formatRegistryKey = etree.SubElement(formatRegistry, PREMIS + 'formatRegistryKey')
-        formatRegistryKey.text = 'x-fmt/265' 
-    
-        for entry in premis_list:
-            event = etree.SubElement(root, PREMIS + 'event')
-            eventID = etree.SubElement(event, PREMIS + 'eventIdentifier')
-            eventIDtype = etree.SubElement(eventID, PREMIS + 'eventIdentifierType')
-            eventIDtype.text = 'UUID'
-            eventIDval = etree.SubElement(eventID, PREMIS + 'eventIdentifierValue')
-            eventIDval.text = str(uuid.uuid4())
-
-            eventType = etree.SubElement(event, PREMIS + 'eventType')
-            eventType.text = entry['eventType']
-
-            eventDateTime = etree.SubElement(event, PREMIS + 'eventDateTime')
-            eventDateTime.text = entry['timestamp']
-
+        #include additional eventDetailInfo to clarify action; older transfers may not include this element, so skip if KeyError
+        try:
             eventDetailInfo = etree.SubElement(event, PREMIS + 'eventDetailInformation')
             eventDetail = etree.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
-            eventDetail.text = entry['eventDetailInfo']
+            eventDetail.text = entry['eventDetailInfo_additional']
+        except KeyError:
+            pass
             
-            #include additional eventDetailInfo to clarify action; older transfers may not include this element, so skip if KeyError
-            try:
-                eventDetailInfo = etree.SubElement(event, PREMIS + 'eventDetailInformation')
-                eventDetail = etree.SubElement(eventDetailInfo, PREMIS + 'eventDetail')
-                eventDetail.text = entry['eventDetailInfo_additional']
-            except KeyError:
-                pass
-                
-            eventOutcomeInfo = etree.SubElement(event, PREMIS + 'eventOutcomeInformation')
-            eventOutcome = etree.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcome')
-            eventOutcome.text = str(entry['eventOutcomeDetail'])
-            eventOutDetail = etree.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcomeDetail')
-            eventOutDetailNote = etree.SubElement(eventOutDetail, PREMIS + 'eventOutcomeDetailNote')
-            if entry['eventOutcomeDetail'] == '0':
-                eventOutDetailNote.text = 'Successful completion'
-            elif entry['eventOutcomeDetail'] == 0:
-                eventOutDetailNote.text = 'Successful completion'
-            else:
-                eventOutDetailNote.text = 'Unsuccessful completion; refer to logs.'
+        eventOutcomeInfo = etree.SubElement(event, PREMIS + 'eventOutcomeInformation')
+        eventOutcome = etree.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcome')
+        eventOutcome.text = str(entry['eventOutcomeDetail'])
+        eventOutDetail = etree.SubElement(eventOutcomeInfo, PREMIS + 'eventOutcomeDetail')
+        eventOutDetailNote = etree.SubElement(eventOutDetail, PREMIS + 'eventOutcomeDetailNote')
+        if entry['eventOutcomeDetail'] == '0':
+            eventOutDetailNote.text = 'Successful completion'
+        elif entry['eventOutcomeDetail'] == 0:
+            eventOutDetailNote.text = 'Successful completion'
+        else:
+            eventOutDetailNote.text = 'Unsuccessful completion; refer to logs.'
 
-            linkingAgentID = etree.SubElement(event, PREMIS + 'linkingAgentIdentifier')
-            linkingAgentIDtype = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
-            linkingAgentIDtype.text = 'local'
-            linkingAgentIDvalue = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
-            linkingAgentIDvalue.text = 'IUL BDPL'
-            linkingAgentRole = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
-            linkingAgentRole.text = 'implementer'
-            linkingAgentID = etree.SubElement(event, PREMIS + 'linkingAgentIdentifier')
-            linkingAgentIDtype = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
-            linkingAgentIDtype.text = 'local'
-            linkingAgentIDvalue = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
-            linkingAgentIDvalue.text = entry['linkingAgentIDvalue']
-            linkingAgentRole = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
-            linkingAgentRole.text = 'executing software'
-            linkingObjectID = etree.SubElement(event, PREMIS + 'linkingObjectIdentifier')
-            linkingObjectIDtype = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierType')
-            linkingObjectIDtype.text = 'local'
-            linkingObjectIDvalue = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierValue')
-            linkingObjectIDvalue.text = barcode.get()
-        
-        premis_tree = etree.ElementTree(root)
-        
-        premis_tree.write(premis_path, pretty_print=True, xml_declaration=True, encoding="utf-8")
+        linkingAgentID = etree.SubElement(event, PREMIS + 'linkingAgentIdentifier')
+        linkingAgentIDtype = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
+        linkingAgentIDtype.text = 'local'
+        linkingAgentIDvalue = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
+        linkingAgentIDvalue.text = 'IUL BDPL'
+        linkingAgentRole = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
+        linkingAgentRole.text = 'implementer'
+        linkingAgentID = etree.SubElement(event, PREMIS + 'linkingAgentIdentifier')
+        linkingAgentIDtype = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierType')
+        linkingAgentIDtype.text = 'local'
+        linkingAgentIDvalue = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentIdentifierValue')
+        linkingAgentIDvalue.text = entry['linkingAgentIDvalue']
+        linkingAgentRole = etree.SubElement(linkingAgentID, PREMIS + 'linkingAgentRole')
+        linkingAgentRole.text = 'executing software'
+        linkingObjectID = etree.SubElement(event, PREMIS + 'linkingObjectIdentifier')
+        linkingObjectIDtype = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierType')
+        linkingObjectIDtype.text = 'local'
+        linkingObjectIDvalue = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierValue')
+        linkingObjectIDvalue.text = barcode.get()
+    
+    premis_tree = etree.ElementTree(root)
+    
+    premis_tree.write(premis_path, pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 def checkFiles(some_dir):
     #check to see if it exists
@@ -1614,7 +1559,7 @@ def produce_dfxml(target):
         dfxml_cmd = 'fiwalk-0.6.3 -x %s > %s' % (target, dfxml_output)
         
         #check if the output file exists AND if the action was recorded in PREMIS; if so, return
-        if check_premis('message digest calculation', dfxml_ver, dfxml_cmd):
+        if check_premis('message digest calculation', dfxml_ver, dfxml_cmd) and re_analyze.get() == False:
             print('\nDFXML already created.  Proceeding to next operation...')
             return
         
@@ -1649,7 +1594,7 @@ def produce_dfxml(target):
         dfxml_ver = 'https://github.com/IUBLibTech/bdpl_ingest'
         dfxml_cmd = 'bdpl_ingest.py'
         
-        if check_premis('message digest calculation', dfxml_ver, dfxml_cmd):
+        if check_premis('message digest calculation', dfxml_ver, dfxml_cmd) and re_analyze.get() == False:
             print('\nDFXML already created.  Proceeding to next operation...')
             return
         
@@ -1827,11 +1772,11 @@ def dir_tree(target):
     premis_list.append(premis_dict(timestamp, 'metadata extraction', exitcode, tree_command, 'Documented the organization and structure of content within a directory tree.', tree_ver))
     pickleDump('premis_list', premis_list)
 
-def format_analysis(files_dir, reports_dir, log_dir, metadata, html):
+def format_analysis(files_dir, reports_dir, log_dir, temp_dir, html):
     
     print('\n\nFILE FORMAT ANALYSIS')
     
-    siegfried_db = os.path.join(metadata, 'siegfried.sqlite')
+    siegfried_db = os.path.join(temp_dir, 'siegfried.sqlite')
     conn = sqlite3.connect(siegfried_db)
     conn.text_factory = str  # allows utf-8 data to be stored
     cursor = conn.cursor() 
@@ -1844,31 +1789,31 @@ def format_analysis(files_dir, reports_dir, log_dir, metadata, html):
     sf_command = 'sf -z -csv "%s" > "%s"' % (files_dir, sf_file)
     
     #make sure we haven't already run this...
-    if not check_premis('format identification', siegfried_version, sf_command):
+    if check_premis('format identification', siegfried_version, sf_command) and re_analyze.get() == False:
         
-        #make sure that there are actually files here
-        if checkFiles(files_dir):
-            
-            print('\nFile format identification with siegfried...') 
+        print('\nFile format analysis already completed. Proceeding to next operation...')
+    
+    else:
+        print('\nFile format identification with siegfried...') 
+    
+        #create timestamp
+        timestamp = str(datetime.datetime.now())
         
-            #create timestamp
-            timestamp = str(datetime.datetime.now())
-            
-            if os.path.exists(sf_file):
-                os.remove(sf_file)                                                                 
-            
-            exitcode = subprocess.call(sf_command, shell=True, text=True)
-            
-            premis_list = pickleLoad('premis_list')
-            
-            premis_list.append(premis_dict(timestamp, 'format identification', exitcode, sf_command, 'Determined file format and version numbers for content recorded in the PRONOM format registry.', siegfried_version))
-            
-            pickleDump('premis_list', premis_list)
+        if os.path.exists(sf_file):
+            os.remove(sf_file)                                                                 
+        
+        exitcode = subprocess.call(sf_command, shell=True, text=True)
+        
+        premis_list = pickleLoad('premis_list')
+        
+        premis_list.append(premis_dict(timestamp, 'format identification', exitcode, sf_command, 'Determined file format and version numbers for content recorded in the PRONOM format registry.', siegfried_version))
+        
+        pickleDump('premis_list', premis_list)
 
-    import_csv(cursor, conn, reports_dir) # load csv into sqlite db
-    get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_dir, log_dir) # get aggregate stats and write to html file
-    generate_reports(cursor, html, reports_dir) # run sql queries, print to html and csv
-    close_html(html) # close HTML file tags
+        import_csv(cursor, conn, reports_dir) # load csv into sqlite db
+        get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_dir, log_dir) # get aggregate stats and write to html file
+        generate_reports(cursor, html, reports_dir) # run sql queries, print to html and csv
+        close_html(html) # close HTML file tags
     
     # close database connections
     cursor.close()
@@ -1911,10 +1856,7 @@ def analyzeContent():
                                                                                                                                    
     #set up html for report
     temp_html = os.path.join(temp_dir, 'temp.html')
-    if (sys.version_info > (3, 0)):
-        html = open(temp_html, 'w', encoding='utf8')
-    else:
-        html = open(temp_html, 'w')  
+    html = open(temp_html, 'w', encoding='utf8')
     
     #run antivirus scan using Windows MpCmdRun.exe
     run_antivirus(files_dir, log_dir, metadata)
@@ -1958,7 +1900,7 @@ def analyzeContent():
         dir_tree(files_dir) 
     
     #run siegfried to characterize file formats  
-    format_analysis(files_dir, reports_dir, log_dir, metadata, html)
+    format_analysis(files_dir, reports_dir, log_dir, temp_dir, html)
     
     #run bulk_extractor and prepare b_e report for write_html--only if disk image or copy job
     if jobType.get() in ['Copy_only', 'Disk_image']:
@@ -1969,8 +1911,11 @@ def analyzeContent():
 
     # write new html file, with hrefs for PRONOM IDs   
     new_html = os.path.join(reports_dir, 'report.html')
-    if not os.path.exists(new_html):
-        write_pronom_links(temp_html, new_html)
+    
+    if os.path.exists(new_html):
+        os.remove(new_html)
+
+    write_pronom_links(temp_html, new_html)
 
     # get format list and add to appraisal dictionary
     appraisal_dict = pickleLoad('appraisal_dict')
@@ -2032,12 +1977,21 @@ def analyzeContent():
     except WindowsError:
         pass
 
-    # remove sqlite db
-    os.remove(os.path.join(metadata, 'siegfried.sqlite'))
+    #create file to indicate that process was completed
+    done_file = os.path.join(temp_dir, 'done.txt')
+    
+    if not os.path.exists(done_file):
+        open(done_file, 'a').close()
     
 def writePremisToExcel(ws, newrow, eventType, premis_list):
-    temp_dict = {}
-    temp_dict = next(item for item in premis_list if item['eventType'] == eventType)
+
+    temp_dict = [item for item in premis_list if item['eventType'] == eventType]
+    
+    if temp_dict:
+        temp_dict = temp_dict[-1]    
+    else:
+        temp_dict = {'linkingAgentIDvalue' : '-', 'timestamp' : '-', 'eventOutcomeDetail' : 'Operation not completed.'}
+        
     ws.cell(row=newrow, column=12, value = temp_dict['linkingAgentIDvalue'])
     ws.cell(row=newrow, column=13, value = temp_dict['timestamp'])
     if temp_dict['eventOutcomeDetail'] == '0' or temp_dict['eventOutcomeDetail'] == 0:
@@ -2047,6 +2001,7 @@ def writePremisToExcel(ws, newrow, eventType, premis_list):
 
 def writeNote():
     ship_dir = bdpl_vars()['ship_dir']
+    temp_dir = bdpl_vars()['temp_dir']
     
     if not verify_data():
         return
@@ -2054,7 +2009,7 @@ def writeNote():
     wb = openpyxl.load_workbook(spreadsheet.get())    
     
     #need to account for situations where we need to write a note after conclusion of analysis--in these cases, we don't want to create a temp file again...
-    if os.path.exists(os.path.join(home_dir, unit.get(), barcode.get(), 'temp')):
+    if os.path.exists(temp_dir):
         bc_dict = pickleLoad('bc_dict')
         bc_dict['label_transcript'] = label_transcription.get(1.0, END).replace('LABEL TRANSCRIPTION:\n\n', '')
     else:
@@ -2115,9 +2070,15 @@ def writeNote():
     #write technician's note
     ws.cell(row=newrow, column=15, value = noteField.get(1.0, END))
     
+    #if we've checked the 'Failed' checkbox, record failure in spreadsheet
     if noteFail.get() == True:
         ws.cell(row=newrow, column=13, value = str(datetime.datetime.now()))
         ws.cell(row=newrow, column=14, value = "Failure")
+        
+        #since we've failed, indicate that barcode is done
+        done_file = os.path.join(temp_dir, 'done.txt')
+        if not os.path.exists(done_file):
+            open(done_file, 'a').close()
 
     #save and close spreadsheet
     wb.save(spreadsheet.get())
@@ -2128,26 +2089,6 @@ def writeSpreadsheet():
     ship_dir = bdpl_vars()['ship_dir']
     
     premis_list = pickleLoad('premis_list')
-    
-    #check to see if we already have a premis file
-    premis_path = os.path.join(bdpl_vars()['metadata'], '%s-premis.xml' % barcode.get())
-    if os.path.exists(premis_path):
-        PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
-        NSMAP = {'premis' : PREMIS_NAMESPACE, "xsi": "http://www.w3.org/2001/XMLSchema-instance"}
-        parser = etree.XMLParser(remove_blank_text=True)
-        tree = etree.parse(premis_path, parser=parser)
-        root = tree.getroot()
-        events = tree.xpath("//premis:event", namespaces=NSMAP)
-        
-        for e in events:
-            temp_dict = {}
-            temp_dict['eventType'] = e.findtext('./premis:eventType', namespaces=NSMAP)
-            temp_dict['eventOutcomeDetail'] = e.findtext('./premis:eventOutcomeInformation/premis:eventOutcome', namespaces=NSMAP)
-            temp_dict['timestamp'] = e.findtext('./premis:eventDateTime', namespaces=NSMAP)
-            temp_dict['eventDetailInfo'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[0].text
-            temp_dict['eventDetailInfo_additional'] = e.findall('./premis:eventDetailInformation/premis:eventDetail', namespaces=NSMAP)[1].text
-            temp_dict['linkingAgentIDvalue'] = e.findall('./premis:linkingAgentIdentifier/premis:linkingAgentIdentifierValue', namespaces=NSMAP)[1].text
-            premis_list.append(temp_dict)
             
     bc_dict = pickleLoad('bc_dict')
     
@@ -2189,7 +2130,7 @@ def writeSpreadsheet():
     #write appraisal information from various procedures
     appraisal_dict = pickleLoad('appraisal_dict')
     
-    ws.cell(row=newrow, column=16, value = appraisal_dict['Extent-normal'])
+    ws.cell(row=newrow, column=16, value = appraisal_dict.get('Extent-normal', 0))
     ws.cell(row=newrow, column=17, value = appraisal_dict['Extent-raw'])
     ws.cell(row=newrow, column=18, value = appraisal_dict['Files'])
     ws.cell(row=newrow, column=19, value = appraisal_dict['Duplicates'])
@@ -2242,9 +2183,11 @@ def cleanUp():
     coll_creator.set('')
     coll_title.set('')
     xfer_source.set('')
-        
+    
+    #reset checkboxes
     mediaStatus.set(False)
     noteFail.set(False)
+    re_analyze.set(False)
     
     #clear text widgets
     bdpl_notes.configure(state='normal')
@@ -2335,6 +2278,7 @@ def verify_barcode():
         
     ship_dir = bdpl_vars()['ship_dir']
     metadata = bdpl_vars()['metadata']
+    temp_dir = bdpl_vars()['temp_dir']
     
     #once we have identified our working spreadsheet (or created it), check data:
     
@@ -2414,20 +2358,23 @@ def verify_barcode():
             noteField.delete('1.0', END)
             noteField.insert(INSERT, notevalue)
             
-            #If a premis file exists, we know the whole process was completed
-            if glob.glob(os.path.join(metadata, '*premis.xml')):
+            #If a 'done' file exists, we know the whole process was completed
+            done_file = os.path.join(temp_dir, 'done.txt')
+            if os.path.exists(done_file): 
                 print('\n\nNOTE: this item barcode has completed the entire ingest workflow.  Consult with the digital preservation librarian if you believe additional procedures are needed.')
-                #shutil.rmtree(bdpl_vars()['temp_dir'])
                 return False
+            #if no 'done' file, see where we are with the item...
             else:
                 premis_list = pickleLoad('premis_list')
                 if len(premis_list) == 0:
                     print('\n\nItem barcode has been added to Appraisal worksheet, but no procedures have been completed.')
+                    break
                 else:
                     print('\n\nItem barcode has been added to Appraisal worksheet; the following procedures have been completed:\n\t', '\n\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list)))))
                 break
         else: 
-                continue
+            continue
+            
     print('\n\nRecord loaded successfully; ready for next operation.')
     return True
     
@@ -2443,15 +2390,21 @@ def check_unfinished():
     ship_dir = bdpl_vars()['ship_dir']
         
     for item_barcode in os.listdir(ship_dir):
-        if os.path.isdir(os.path.join(ship_dir, item_barcode)):
-            if os.path.exists(bdpl_vars()['temp_dir']):
-                premis_list = pickleLoad('premis_list')
-                if len(premis_list) == 0:
-                    print('\nBarcode: %s' % item_barcode)
-                    print('\tItem folder structure has been created, but no ingest procedures have been completed.')
-                else:
-                    print('\nBarcode: %s' % item_barcode)
-                    print('\tThe following procedures have been completed:\n\t', '\n\t\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list)))))
+        if not os.path.exists(os.path.join(ship_dir, item_barcode, 'temp', 'done.txt')):
+            
+            premis_file = os.path.join(ship_dir, item_barcode, 'temp', 'premis_list.txt')
+            if os.path.exists(premis_file):
+                with open(premis_file, 'rb') as f:
+                    premis_list = pickle.load(f)
+            else:
+                premis_list = []
+                
+            if len(premis_list) == 0:
+                print('\nBarcode: %s' % item_barcode)
+                print('\tItem folder structure has been created, but no ingest procedures have been completed.')
+            else:
+                print('\nBarcode: %s' % item_barcode)
+                print('\tThe following procedures have been completed:\n\t', '\n\t\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list)))))
 
 def check_progress():
     
@@ -2557,7 +2510,7 @@ def updateCombobox():
 
 def main():
     
-    global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, bdpl_home, home_dir, shipDateCombo, noteFail
+    global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, bdpl_home, home_dir, shipDateCombo, noteFail, re_analyze
     
     home_dir = 'Z:\\'
     bdpl_home = 'C:\\BDPL'
@@ -2678,6 +2631,11 @@ def main():
     
     jobType4 = Radiobutton(upperMiddle, text='CDDA', value='CDDA', variable=jobType)
     jobType4.grid(column=4, row=1, padx=10, pady=5)
+    
+    re_analyze = BooleanVar()
+    re_analyze.set(False)
+    re_analyzeChk = Checkbutton(upperMiddle, text='Re-analyze files', variable=re_analyze)
+    re_analyzeChk.grid(column=5, row=1, padx=10, pady=5)
     
     '''
                 MID MIDDLE
