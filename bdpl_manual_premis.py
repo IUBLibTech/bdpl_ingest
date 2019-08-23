@@ -9,6 +9,8 @@ Staff should launch bdpl_ingest.py, with 're-analyze files' option.
 import pickle
 import os
 import datetime
+from lxml import etree
+import shutil
 
 def pickleLoad(target, barcode):
     metadata = os.path.join(target, 'metadata')
@@ -46,6 +48,8 @@ def pickleLoad(target, barcode):
                 temp_premis.append(temp_dict)
                 
             #now create our premis_xml_included.txt file so we don't go through this again.
+            if not os.path.exists(temp_dir):
+                os.mkdir(temp_dir)
             open(premis_xml_included, 'a').close()
         
     #make sure there's something in the file
@@ -77,11 +81,15 @@ def premis_dict(timestamp, event_type, event_outcome, event_detail, event_detail
 def main():
     print('\nNOTE: timestamp should be recorded immediately before running manual operation.')
     timestamp = input('\nEnter ISO-formatted timestamp, path to log file, or hit "Enter" to record timestamp: ')
-
+    folder = ''
     if timestamp == '':
         timestamp = str(datetime.datetime.now())
     elif os.path.isfile(timestamp):
         timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(timestamp)).isoformat()
+    elif os.path.isdir(timestamp):
+        folder = timestamp
+        timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(timestamp)).isoformat()
+        
 
     event_list = ['replication', 'disk image creation', 'normalization', 'forensic feature analysis', 'format identification', 'message digest calculation', 'metadata extraction', 'forensic feature analysis', 'virus check']
 
@@ -128,6 +136,18 @@ def main():
     temp_file = os.path.join(temp_dir, 'premis_list.txt')
     with open(temp_file, 'wb') as file:
         pickle.dump(premis_list, file)
+        
+    if os.path.isdir(folder) and event_type == 'replication':
+        dfxml = os.path.join(target, 'metadata', '%s-dfxml.xml' % barcode)
+        if os.path.exists(dfxml):
+            os.remove(dfxml)
+        
+        dest = os.path.join(target, 'files')
+        try:
+            shutil.move(folder, dest)
+        except:
+            print('\nMay need to manually move files...')
+        
         
     print('\nPREMIS preservation metadata added to barcode transfer information')
 

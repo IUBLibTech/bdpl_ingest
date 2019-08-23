@@ -1599,12 +1599,25 @@ def produce_dfxml(target):
             return
         
         timestamp = str(datetime.datetime.now().isoformat())
+        
+        done_list = []
+        
         temp_dfxml = os.path.join(temp_dir, 'temp_dfxml.txt')
+        if os.path.exists(temp_dfxml):
+            with open(temp_dfxml, 'r') as f:
+                done_so_far = f.read().splitlines()
+                for d in done_so_far:
+                    line = d.split(' | ')
+                    done_list.append(line[0])
+                    file_dict = { 'name' : line[0], 'size' : line[1], 'mtime' : line[2], 'ctime' : line[3], 'atime' : line[4], 'checksum' : line[5], 'counter' : line[6] }
+                    file_stats.append(file_dict)
         
         #this will create an empty list or, if we've previously crashed or been stopped, will load any info previously stored
-        file_stats = pickleLoad('temp_dfxml')
         
-        counter = 0
+        if len(file_stats) > 0:
+            counter = file_stats[-1]['counter']
+        else:
+            counter = 1
 
         for root, dirnames, filenames in os.walk(target):
             #sort our filenames so we always work in the same order
@@ -1612,23 +1625,29 @@ def produce_dfxml(target):
             for file in filenames:
                 
                 #check to make sure that we haven't already added info for this file
-                if len(file_stats) > 0:
-                    if counter <= file_stats[-1]['counter']:
-                        continue
-                
                 file_target = os.path.join(root, file)
+                if file_target in done_list:
+                    continue
+                
                 size = os.path.getsize(file_target)
                 mtime = datetime.datetime.fromtimestamp(os.path.getmtime(file_target)).isoformat()
                 ctime = datetime.datetime.fromtimestamp(os.path.getctime(file_target)).isoformat()
                 atime = datetime.datetime.fromtimestamp(os.path.getatime(file_target)).isoformat()[:-7]
                 checksum = md5(file_target)
                 
-                file_dict = { 'name' : file_target, 'size' : size, 'mtime' : mtime, 'ctime' : ctime, 'atime' : atime, 'checksum' : checksum, 'counter' : counter}
+                file_dict = { 'name' : file_target, 'size' : size, 'mtime' : mtime, 'ctime' : ctime, 'atime' : atime, 'checksum' : checksum, 'counter' : counter }
+                
+                print('\rFile no.: %s\t%s' % (counter, file_target), end='')
                 
                 file_stats.append(file_dict)
                 
+                #add this file to our 'done list'
+                done_list.append(file_target)
+                
                 #save this list to file just in case we crash...
-                pickleDump('temp_dfxml', file_stats)
+                raw_stats = "%s | %s | %s | %s | %s | %s | %s\n" % (file_target, size, mtime, ctime, atime, checksum, counter)
+                with open(temp_dfxml, 'a') as f:
+                    f.write(raw_stats)
                 
                 counter += 1
         
