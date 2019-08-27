@@ -49,7 +49,7 @@ def check_premis(term, version, command):
     premis_list = pickleLoad('premis_list')
     
     for dic in premis_list:
-        if dic['eventType'] == term and dic['eventDetailInfo'] == command and dic['linkingAgentIDvalue'] == version:
+        if dic['eventType'] == term and dic['eventDetailInfo'] == command and version in dic['linkingAgentIDvalue']:
             if  dic['eventOutcomeDetail'] == '0' or dic['eventOutcomeDetail'] == 0:
                 return True
         else:
@@ -813,7 +813,7 @@ def run_antivirus(files_dir, log_dir, metadata):
     av_command = 'clamscan -i -l %s --recursive %s' % (virus_log, files_dir)
     
     #return if virus scan already run
-    if check_premis('virus check', av_ver, av_command) and re_analyze.get() == False:
+    if check_premis('virus check', av_ver[:6], av_command) and re_analyze.get() == False:
         print('\nVirus scan already completed.  Proceeding to next operation...')
         return
     
@@ -1385,7 +1385,7 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     html.write('\n<h2 class="card-header">Statistics</h2>')
     html.write('\n<div class="card-body">')
     html.write('\n<h4>Overview</h4>')
-    html.write('\n<p><strong>Total files:</strong> %s</p>' % num_files)
+    html.write('\n<p><strong>Total files:</strong> %s (includes contents of archive files)</p>' % num_files)
     html.write('\n<p><strong>Total size:</strong> %s</p>' % size)
     html.write('\n<p><strong>Years (last modified):</strong> %s - %s</p>' % (begin_date, end_date))
     html.write('\n<p><strong>Earliest date:</strong> %s</p>' % earliest_date)
@@ -1550,6 +1550,8 @@ def produce_dfxml(target):
     
     timestamp = str(datetime.datetime.now())
     
+    file_stats = []
+    
     #use fiwalk if we have an image file
     if os.path.isfile(target):
         print('\n\nDIGITAL FORENSICS XML CREATION: FIWALK')
@@ -1566,7 +1568,6 @@ def produce_dfxml(target):
         exitcode = subprocess.call(dfxml_cmd, shell=True, text=True)
                 
         #for jobs other than DVD, parse dfxml to get info for later...
-        file_stats = []
         
         tree = etree.parse(dfxml_output)
         
@@ -1612,22 +1613,28 @@ def produce_dfxml(target):
                     file_dict = { 'name' : line[0], 'size' : line[1], 'mtime' : line[2], 'ctime' : line[3], 'atime' : line[4], 'checksum' : line[5], 'counter' : line[6] }
                     file_stats.append(file_dict)
         
-        #this will create an empty list or, if we've previously crashed or been stopped, will load any info previously stored
-        
         if len(file_stats) > 0:
-            counter = file_stats[-1]['counter']
+            counter = int(file_stats[-1]['counter'])
         else:
-            counter = 1
-
+            counter = 0
+        
+        #get total number of files
+        total = 0
         for root, dirnames, filenames in os.walk(target):
-            #sort our filenames so we always work in the same order
-            filenames.sort()
+            total += len(filenames)
+        
+        print('\n\n')
+        
+        #now loop through, keeping count
+        for root, dirnames, filenames in os.walk(target):
             for file in filenames:
                 
                 #check to make sure that we haven't already added info for this file
                 file_target = os.path.join(root, file)
                 if file_target in done_list:
                     continue
+                
+                counter += 1
                 
                 size = os.path.getsize(file_target)
                 mtime = datetime.datetime.fromtimestamp(os.path.getmtime(file_target)).isoformat()
@@ -1637,7 +1644,7 @@ def produce_dfxml(target):
                 
                 file_dict = { 'name' : file_target, 'size' : size, 'mtime' : mtime, 'ctime' : ctime, 'atime' : atime, 'checksum' : checksum, 'counter' : counter }
                 
-                print('\rFile no.: %s\t%s' % (counter, file_target), end='')
+                print('\rCalculating checksum for file %d out of %d' % (counter, total), end='')
                 
                 file_stats.append(file_dict)
                 
@@ -1648,8 +1655,6 @@ def produce_dfxml(target):
                 raw_stats = "%s | %s | %s | %s | %s | %s | %s\n" % (file_target, size, mtime, ctime, atime, checksum, counter)
                 with open(temp_dfxml, 'a') as f:
                     f.write(raw_stats)
-                
-                counter += 1
         
         dc_namespace = 'http://purl.org/dc/elements/1.1/'
         dc = "{%s}" % dc_namespace
