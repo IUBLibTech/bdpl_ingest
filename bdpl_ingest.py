@@ -242,7 +242,7 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     else:
         dd_target = sourceDevice.get()
         
-    print('\n\nDISK IMAGE CREATION: DDRESCUE\n\tSOURCE: %s \n\tDESTINATION: %s\n\n' % (dd_target, imagefile))
+    print('\n\nDISK IMAGE CREATION: DDRESCUE\n\tSOURCE: %s \n\tDESTINATION: %s' % (dd_target, imagefile))
     
     #set up premis list
     premis_list = pickleLoad('premis_list')
@@ -265,7 +265,7 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     copycmd1 = 'ddrescue -n --log-events=%s --log-rates=%s --log-reads=%s %s %s %s' % (ddrescue_events1, ddrescue_rates1, ddrescue_reads1, dd_target, imagefile, mapfile)
     
     #run commands via subprocess; per ddrescue instructions, we need to run it twice    
-
+    print('\n---------------First pass with ddrescue---------------\n')
     exitcode1 = subprocess.call(copycmd1, shell=True, text=True)
     
     premis_list.append(premis_dict(timestamp1, 'disk image creation', exitcode1, copycmd1, 'First pass; extracted a disk image from the physical information carrier.', migrate_ver))
@@ -274,6 +274,8 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     timestamp2 = str(datetime.datetime.now())
     
     copycmd2 = 'ddrescue -d -r2 --log-events=%s --log-rates=%s --log-reads=%s %s %s %s' % (ddrescue_events2, ddrescue_rates2, ddrescue_reads2, dd_target, imagefile, mapfile)
+    
+    print('\n\n---------------Second pass with ddrescue---------------\n')
     
     exitcode2 = subprocess.call(copycmd2, shell=True, text=True)
     
@@ -420,7 +422,8 @@ def TransferContent():
                             temp['desc'] = fsname
                             temp['slot'] = mm[0].split()[1]
                             #now save this dictionary to our list of partition info
-                            partition_info.append(temp)
+                            if not temp in partition_info:
+                                partition_info.append(temp)
     
         if len(fs_list) > 0:
         
@@ -1588,7 +1591,7 @@ def produce_dfxml(target):
                 file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
                 file_stats.append(file_dict)
     
-    #use custom operation if we have a copy operation    
+    #use custom operation for other cases    
     elif os.path.isdir(target):
         print('\n\nDIGITAL FORENSICS XML CREATION: bdpl_ingest')
         
@@ -1623,7 +1626,7 @@ def produce_dfxml(target):
         for root, dirnames, filenames in os.walk(target):
             total += len(filenames)
         
-        print('\n\n')
+        print('\n')
         
         #now loop through, keeping count
         for root, dirnames, filenames in os.walk(target):
@@ -1655,6 +1658,7 @@ def produce_dfxml(target):
                 raw_stats = "%s | %s | %s | %s | %s | %s | %s\n" % (file_target, size, mtime, ctime, atime, checksum, counter)
                 with open(temp_dfxml, 'a') as f:
                     f.write(raw_stats)
+        print('\n')
         
         dc_namespace = 'http://purl.org/dc/elements/1.1/'
         dc = "{%s}" % dc_namespace
