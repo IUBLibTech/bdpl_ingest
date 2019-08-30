@@ -2460,16 +2460,21 @@ def check_progress():
             app_list.append(str(col.value))
     
     #get list of all barcodes on inventory spreadsheet
-    inv_list = []
+    inv_bcs = {}
     for col in ws2['A'][1:]:
         if not col.value is None:
-            inv_list.append(str(col.value))
+            inv_bcs[col.value] = col.row
+    
+    inv_list = list(inv_bcs.keys())
+            
     
     #check to see if there are any duplicate barcodes in the inventory; print warning if so
     duplicate_barcodes = [item for item, count in Counter(inv_list).items() if count > 1]
     
     if duplicate_barcodes:
-        print('\n\nWARNING! Inventory contains at least one duplicate barcode:\n\t%s' % '\n\t'.join(duplicate_barcodes))
+        print('\n\nWARNING! Inventory contains at least one duplicate barcode:')
+        for dup in duplicate_barcodes:
+            print('\t%s\tRow: %s' % (dup, inv_bcs[dup]))
     
     current_total = len(inv_list) - len(app_list)
     
