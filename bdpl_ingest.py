@@ -934,6 +934,9 @@ def import_csv(cursor, conn, reports_dir):
                 cursor.execute(insertsql, row)
     conn.commit()
     f.close()
+    
+    sqlite_done = os.path.join(bdpl_vars()['temp_dir'], 'sqlite_done.txt')
+    open(sqlite_done, 'a').close()
 
 def generate_reports(cursor, html, reports_dir):
     temp_dir = bdpl_vars()['temp_dir']
@@ -946,24 +949,27 @@ def generate_reports(cursor, html, reports_dir):
                 'Basis for ID', 'Warning']
     
     # sorted format list report
-    sql = "SELECT format, id, COUNT(*) as 'num' FROM siegfried GROUP BY format ORDER BY num DESC"
     path = os.path.join(reports_dir, 'formats.csv')
-    format_header = ['Format', 'ID', 'Count']
-    sqlite_to_csv(sql, path, format_header, cursor)
+    if not os.path.exists(path) or re_analyze.get() == True:
+        sql = "SELECT format, id, COUNT(*) as 'num' FROM siegfried GROUP BY format ORDER BY num DESC"
+        format_header = ['Format', 'ID', 'Count']
+        sqlite_to_csv(sql, path, format_header, cursor)
     write_html('File formats', path, ',', html)
 
     # sorted format and version list report
-    sql = "SELECT format, id, version, COUNT(*) as 'num' FROM siegfried GROUP BY format, version ORDER BY num DESC"
     path = os.path.join(reports_dir, 'formatVersions.csv')
-    version_header = ['Format', 'ID', 'Version', 'Count']
-    sqlite_to_csv(sql, path, version_header, cursor)
+    if not os.path.exists(path) or re_analyze.get() == True:
+        sql = "SELECT format, id, version, COUNT(*) as 'num' FROM siegfried GROUP BY format, version ORDER BY num DESC"
+        version_header = ['Format', 'ID', 'Version', 'Count']
+        sqlite_to_csv(sql, path, version_header, cursor)
     write_html('File format versions', path, ',', html)
 
     # sorted mimetype list report
-    sql = "SELECT mime, COUNT(*) as 'num' FROM siegfried GROUP BY mime ORDER BY num DESC"
     path = os.path.join(reports_dir, 'mimetypes.csv')
-    mime_header = ['MIME type', 'Count']
-    sqlite_to_csv(sql, path, mime_header, cursor)
+    if not os.path.exists(path) or re_analyze.get() == True:
+        sql = "SELECT mime, COUNT(*) as 'num' FROM siegfried GROUP BY mime ORDER BY num DESC"
+        mime_header = ['MIME type', 'Count']
+        sqlite_to_csv(sql, path, mime_header, cursor)
     write_html('MIME types', path, ',', html)
 
     # dates report
@@ -971,15 +977,17 @@ def generate_reports(cursor, html, reports_dir):
     write_html('Last modified dates by year', path, ',', html)
     
     # unidentified files report
-    sql = "SELECT * FROM siegfried WHERE id='UNKNOWN';"
     path = os.path.join(reports_dir, 'unidentified.csv')
-    sqlite_to_csv(sql, path, full_header, cursor)
+    if not os.path.exists(path) or re_analyze.get() == True:
+        sql = "SELECT * FROM siegfried WHERE id='UNKNOWN';"
+        sqlite_to_csv(sql, path, full_header, cursor)
     write_html('Unidentified', path, ',', html)
     
     # errors report
-    sql = "SELECT * FROM siegfried WHERE errors <> '';"
     path = os.path.join(reports_dir, 'errors.csv')
-    sqlite_to_csv(sql, path, full_header, cursor)
+    if not os.path.exists(path) or re_analyze.get() == True:
+        sql = "SELECT * FROM siegfried WHERE errors <> '';"
+        sqlite_to_csv(sql, path, full_header, cursor)
     write_html('Errors', path, ',', html)
     
     # duplicates report: just use our pickled list 
@@ -1165,7 +1173,7 @@ def write_html(header, path, file_delimiter, html):
                 html.write('\n<tr>')
                 row1 = next(r)
                 for column in row1:
-                    html.write('\n<th>' + column + '</th>')
+                    html.write('\n<th>' + str(column) + '</th>')
                 html.write('\n</tr>')
                 html.write('\n</thead>')
                 # write data rows
@@ -1174,7 +1182,7 @@ def write_html(header, path, file_delimiter, html):
                     # write data
                     html.write('\n<tr>')
                     for column in row:
-                        html.write('\n<td>' + column + '</td>')
+                        html.write('\n<td>' + str(column) + '</td>')
                     html.write('\n</tr>')
                 html.write('\n</tbody>')
                 html.write('\n</table>')
@@ -1804,11 +1812,6 @@ def format_analysis(files_dir, reports_dir, log_dir, temp_dir, html):
     
     print('\n\nFILE FORMAT ANALYSIS')
     
-    siegfried_db = os.path.join(temp_dir, 'siegfried.sqlite')
-    conn = sqlite3.connect(siegfried_db)
-    conn.text_factory = str  # allows utf-8 data to be stored
-    cursor = conn.cursor() 
-    
     scan_started = str(datetime.datetime.now()) # get time 
     sfcmd = 'sf -version'
     siegfried_version = subprocess.check_output(sfcmd, shell=True, text=True).replace('\n', ' ')
@@ -1837,11 +1840,18 @@ def format_analysis(files_dir, reports_dir, log_dir, temp_dir, html):
         premis_list.append(premis_dict(timestamp, 'format identification', exitcode, sf_command, 'Determined file format and version numbers for content recorded in the PRONOM format registry.', siegfried_version))
         
         pickleDump('premis_list', premis_list)
-
+    
+    siegfried_db = os.path.join(temp_dir, 'siegfried.sqlite')
+    conn = sqlite3.connect(siegfried_db)
+    conn.text_factory = str  # allows utf-8 data to be stored
+    cursor = conn.cursor() 
+    
+    if not os.path.exists(os.path.join(temp_dir, 'sqlite_done.txt')) or re_analyze.get() == True:
         import_csv(cursor, conn, reports_dir) # load csv into sqlite db
-        get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_dir, log_dir) # get aggregate stats and write to html file
-        generate_reports(cursor, html, reports_dir) # run sql queries, print to html and csv
-        close_html(html) # close HTML file tags
+        
+    get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_dir, log_dir) # get aggregate stats and write to html file
+    generate_reports(cursor, html, reports_dir) # run sql queries, print to html and csv
+    close_html(html) # close HTML file tags
     
     # close database connections
     cursor.close()
