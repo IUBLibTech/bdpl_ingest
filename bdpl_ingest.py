@@ -1247,24 +1247,27 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
     except FileNotFoundError:
         pass
     
-    #next, create a new dictionary that IDs checksums that correspond to 1 or more files. NOTE: the 'file_stats' list will be empty for DVDs, so we'll skip this step in that case
-    if len(file_stats) > 0:
-        stat_dict = {}
-        for dctnry in file_stats:
-            if int(dctnry['size']) > 0:
-                if dctnry['checksum'] in stat_dict:
-                    stat_dict[dctnry['checksum']].append(dctnry['name'])
-                else:
-                    stat_dict[dctnry['checksum']] = [dctnry['name']]
-       
-        #go through new dict and find checksums with duplicates
-        for chksm in [key for key, values in stat_dict.items() if len(values) > 1]:
-            for fname in stat_dict[chksm]:
-                temp = [item for item in file_stats if item['checksum'] == chksm and item['name'] == fname][0]
-                dup_list.append([temp['name'], temp['size'], temp['mtime'], temp['checksum']])
-        
-    #save this duplicate file for later when we need to write to html
-    pickleDump('duplicates', dup_list)
+    if os.path.exists(os.path.join(temp_dir, 'duplicates.txt')) and re_analyze.get() == False:
+        dup_list = pickleLoad('duplicates')
+    else:
+        #next, create a new dictionary that IDs checksums that correspond to 1 or more files. NOTE: the 'file_stats' list will be empty for DVDs, so we'll skip this step in that case
+        if len(file_stats) > 0:
+            stat_dict = {}
+            for dctnry in file_stats:
+                if int(dctnry['size']) > 0:
+                    if dctnry['checksum'] in stat_dict:
+                        stat_dict[dctnry['checksum']].append(dctnry['name'])
+                    else:
+                        stat_dict[dctnry['checksum']] = [dctnry['name']]
+           
+            #go through new dict and find checksums with duplicates
+            for chksm in [key for key, values in stat_dict.items() if len(values) > 1]:
+                for fname in stat_dict[chksm]:
+                    temp = [item for item in file_stats if item['checksum'] == chksm and item['name'] == fname][0]
+                    dup_list.append([temp['name'], temp['size'], temp['mtime'], temp['checksum']])
+            
+        #save this duplicate file for later when we need to write to html
+        pickleDump('duplicates', dup_list)
     
     #total duplicates = total length of duplicate list
     all_dupes = len(dup_list)
