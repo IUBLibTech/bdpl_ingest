@@ -311,9 +311,12 @@ def TransferContent():
     
     newscreen()
     
-    #check that barcode exists on spreadsheet; exit if not wrong
+    #check that information is added to GUI
     if not verify_data():
         return
+    
+    if not os.path.exists(bdpl_vars()['destination']):
+        first_run()
 
     print('\n\nSTEP 1. TRANSFER CONTENT')
         
@@ -1754,7 +1757,7 @@ def disk_image_info(imagefile, reports_dir):
     premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, disktype_command, 'Determined disk image file system information.', 'disktype v9'))
     
     #print out disktype info
-    with open(disktype_output, 'r') as f:
+    with open(disktype_output, 'r', encoding='utf8') as f:
         print(f.read(), end="")
     
     #run fsstat: get range of meta-data values (inode numbers) and content units (blocks or clusters)
@@ -2476,7 +2479,7 @@ def check_progress():
     inv_bcs = {}
     for col in ws2['A'][1:]:
         if not col.value is None:
-            inv_bcs[col.value] = col.row
+            inv_bcs[str(col.value)] = col.row
     
     inv_list = list(inv_bcs.keys())
             
