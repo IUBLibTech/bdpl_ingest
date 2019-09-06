@@ -215,6 +215,8 @@ def secureCopy(file_source, file_destination):
 
 def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
     
+    check_device = subprocess.check_output('cat /proc/partitions', text=True)
+    
     if sourceDevice.get() == 'Zip':
         ps_cmd = "Get-Partition | % {New-Object PSObject -Property @{'DiskModel'=(Get-Disk $_.DiskNumber).Model; 'DriveLetter'=$_.DriveLetter}}"
         cmd = 'powershell.exe "%s"' % ps_cmd
@@ -228,16 +230,21 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
         except UnboundLocalError:
             print('\n\nNOTE: Zip drive not recognized.  If you have not done so, insert disk into drive and allow device to complete initial loading.')
             return
-
-        cmd = 'cat /proc/partitions'
-        out2 = subprocess.check_output(cmd, shell=True, text=True)
-        for line in out2.splitlines():
+        
+        #get device name from /proc/partitions
+        for line in check_device.splitlines():
             if len(line.split()) == 5 and drive_ltr in line.split()[4]:
                 dd_target = '/dev/%s' % line.split()[3]
     
+    #use case involving internal hard drive
     elif sourceDevice.get() == 'Other':
-        print('ERROR! Need to figure out what drive/device we would use...')
-        return
+        #make sure device name is correct
+        if other_device.get() in check_device:
+            print('here')
+            dd_target = '/dev/%s' % other_device.get()
+        else:
+            print('\nNOTE: device name "%s" not found in /proc/partitions; verify and try again.' % other_device.get())
+            return
         
     else:
         dd_target = sourceDevice.get()
@@ -379,6 +386,11 @@ def TransferContent():
         else:
             
             ddrescue_image(temp_dir, log_dir, imagefile, image_dir)
+        
+        #exit if disk image doesn't exist
+        if not os.path.isfile(imagefile):
+            print('\nNOTE: Disk image not created. Exiting transfer process; correct issues and try again.')
+            return
         
         #now attempt to replicate/extract content from disk image
         print('\n\nFILE REPLICATION: ')
@@ -2215,6 +2227,7 @@ def cleanUp():
     source2.deselect()
     source3.deselect()
     source4.deselect()
+    source5.deselect()
     disk525.set('N/A')
 
     #clear Int variables
@@ -2227,6 +2240,7 @@ def cleanUp():
     coll_creator.set('')
     coll_title.set('')
     xfer_source.set('')
+    other_device.set('')
     
     #reset checkboxes
     mediaStatus.set(False)
@@ -2559,7 +2573,7 @@ def updateCombobox():
 
 def main():
     
-    global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, bdpl_home, home_dir, shipDateCombo, noteFail, re_analyze
+    global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, source5, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, bdpl_home, home_dir, shipDateCombo, noteFail, re_analyze, other_device
     
     home_dir = 'Z:\\'
     bdpl_home = 'C:\\BDPL'
@@ -2717,7 +2731,7 @@ def main():
     disk525 = StringVar()
     disk525.set('N/A')
             
-    sourceDeviceLabel = Label(lowerMiddle, text='Media source:')
+    sourceDeviceLabel = Label(lowerMiddle, text='Media:')
     sourceDeviceLabel.grid(column=0, row=0)
         
     source1 = Radiobutton(lowerMiddle, text='CD/DVD', value='/dev/sr0', variable=sourceDevice)
@@ -2725,35 +2739,42 @@ def main():
     source3 = Radiobutton(lowerMiddle, text='5.25" fd', value='5.25', variable=sourceDevice)
     disk_menu = OptionMenu(lowerMiddle, disk525, *disk_type_options)    
     source4 = Radiobutton(lowerMiddle, text='Zip', value='Zip', variable=sourceDevice)
-    source5 = Radiobutton(lowerMiddle, text='Other', value='other', variable=sourceDevice)
+    source5 = Radiobutton(lowerMiddle, text='Other', value='Other', variable=sourceDevice)
+    
+    other_device = StringVar()
+    other_device.set('')
+    other_deviceTxt = Label(lowerMiddle, text="(& name)")
+    other_deviceEntry = Entry(lowerMiddle, width=5, textvariable=other_device)
 
-    source1.grid(column=1, row=0, padx=10, pady=5)
-    source2.grid(column=2, row=0, padx=10, pady=5)
-    source3.grid(column=3, row=0, padx=10, pady=5)
-    disk_menu.grid(column=4, row=0, padx=10, pady=5)
-    source4.grid(column=5, row=0, padx=10, pady=5)
-    source5.grid(column=6, row=0, padx=10, pady=5)
+    source1.grid(column=1, row=0, padx=5, pady=5)
+    source2.grid(column=2, row=0, padx=5, pady=5)
+    source3.grid(column=3, row=0, padx=5, pady=5)
+    disk_menu.grid(column=4, row=0, padx=5, pady=5)
+    source4.grid(column=5, row=0, padx=5, pady=5)
+    source5.grid(column=6, row=0, padx=(5,0), pady=5)
+    other_deviceTxt.grid(column=7, padx=(0,5), row=0)
+    other_deviceEntry.grid(column=8, padx=5, row=0)
 
     #buttons: kick off various functions    
-    newBtn = Button(lowerMiddle, text="New transfer", command=cleanUp)
-    newBtn.grid(column=0, row=2, padx=10, pady=5)
+    newBtn = Button(lowerMiddle, text="New", command=cleanUp)
+    newBtn.grid(column=0, row=2, padx=5, pady=5)
 
-    createBtn = Button(lowerMiddle, text="Load record", command=first_run)
-    createBtn.grid(column=1, row=2, padx=10, pady=5)
+    createBtn = Button(lowerMiddle, text="Load", command=first_run)
+    createBtn.grid(column=1, row=2, padx=5, pady=5)
 
     transferBtn = Button(lowerMiddle, text="Transfer", command=TransferContent)
-    transferBtn.grid(column=2, row=2, padx=10, pady=5)
+    transferBtn.grid(column=2, row=2, padx=5, pady=5)
 
-    analyzeBtn = Button(lowerMiddle, text="Analysis", command=analyzeContent)
-    analyzeBtn.grid(column=3, row=2, padx=10, pady=5)
+    analyzeBtn = Button(lowerMiddle, text="Analyze", command=analyzeContent)
+    analyzeBtn.grid(column=3, row=2, padx=5, pady=5)
         
-    closeBtn = Button(lowerMiddle, text="  Quit  ", command=closeUp)
-    closeBtn.grid(column=4, row=2, padx=10, pady=5)
+    closeBtn = Button(lowerMiddle, text="Quit", command=closeUp)
+    closeBtn.grid(column=4, row=2, padx=5, pady=5)
 
     mediaStatus = BooleanVar()
     mediaStatus.set(False)
-    mediaStatusChk = Checkbutton(lowerMiddle, text="Media present?", variable=mediaStatus)
-    mediaStatusChk.grid(column=5, row=2)
+    mediaStatusChk = Checkbutton(lowerMiddle, text="Attached?", variable=mediaStatus)
+    mediaStatusChk.grid(column=5, row=2, padx=5, pady=5)
     
     '''
     
