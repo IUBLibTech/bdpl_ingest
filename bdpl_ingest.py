@@ -301,7 +301,7 @@ def ddrescue_image(temp_dir, log_dir, imagefile, image_dir):
 
 def mediaCheck():
     if mediaStatus.get() == False:
-        print('\n\nMake sure that media has been inserted/attached; check the "Media present?" box and continue.')
+        print('\n\nMake sure that media has been inserted/attached; check the "Attached?" box and continue.')
         return False
     else:
         return True

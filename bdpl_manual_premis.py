@@ -91,7 +91,7 @@ def main():
         timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(timestamp)).isoformat()
         
 
-    event_list = ['replication', 'disk image creation', 'normalization', 'forensic feature analysis', 'format identification', 'message digest calculation', 'metadata extraction', 'forensic feature analysis', 'virus check']
+    event_list = ['replication', 'metadata modification', 'disk image creation', 'normalization', 'forensic feature analysis', 'format identification', 'message digest calculation', 'metadata extraction', 'forensic feature analysis', 'virus check']
 
     while True:
      
@@ -106,7 +106,7 @@ def main():
 
     event_detail = input('\nEnter command line option or note GUI operation: ')
 
-    event_notes_dict = {'replication' : 'Created a copy of an object that is, bit-wise, identical to the original.', 'disk image creation' : 'Extracted a disk image from the physical information carrier.', 'normalization' : 'Transformed object to an institutionally supported preservation format.', 'virus check' : 'Scanned files for malicious programs.', 'format identification' : 'Determined file format and version numbers for content recorded in the PRONOM format registry.', 'metadata extraction' : '',  'forensic feature analysis' : '', 'message digest calculation' : 'Extracted information about the structure and characteristics of content, including file checksums.'}
+    event_notes_dict = {'replication' : 'Created a copy of an object that is, bit-wise, identical to the original.', 'disk image creation' : 'Extracted a disk image from the physical information carrier.', 'normalization' : 'Transformed object to an institutionally supported preservation format.', 'virus check' : 'Scanned files for malicious programs.', 'format identification' : 'Determined file format and version numbers for content recorded in the PRONOM format registry.', 'metadata extraction' : '',  'forensic feature analysis' : '', 'message digest calculation' : 'Extracted information about the structure and characteristics of content, including file checksums.', 'metadata modification' : 'Corrected file timestamps to match information extracted from disk image.'}
 
     if event_type == 'metadata extraction' or event_type == 'forensic feature analysis':
         event_detail_note = inpit('\nEnter description of event: ')
