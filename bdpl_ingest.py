@@ -1306,10 +1306,13 @@ def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_
         for dctnry in file_stats:
             date_info.append(dctnry['mtime'])
         
-        begin_date = min(date_info)[:4]
-        end_date = max(date_info)[:4]
-        earliest_date = min(date_info)
-        latest_date = max(date_info)   
+        #remove all occurences of 'undated', to get better info
+        date_info_check = [x for x in date_info if x != 'undated']
+        
+        begin_date = min(date_info_check)[:4]
+        end_date = max(date_info_check)[:4]
+        earliest_date = min(date_info_check)
+        latest_date = max(date_info_check)   
     
     else:
         begin_date = "undated"
@@ -1597,25 +1600,46 @@ def produce_dfxml(target):
         exitcode = subprocess.call(dfxml_cmd, shell=True, text=True)
                 
         #for jobs other than DVD, parse dfxml to get info for later...
-        
-        tree = etree.parse(dfxml_output)
-        
-        file_objects = tree.xpath("//fileobject")
-        
-        for file_object in file_objects:
-            if file_object.findtext("./name_type") == "r" and file_object.findtext("./alloc") == "1":
-                target = file_object.findtext("./filename")
-                size = file_object.findtext("./filesize")
-                checksum = file_object.findtext("./hashdigest[@type='md5']")
-                if file_object.findtext("./mtime"):
-                    mtime = datetime.datetime.utcfromtimestamp(int(file_object.findtext("./mtime"))).isoformat()
-                elif file_object.findtext("./crtime"):
-                    mtime = datetime.datetime.utcfromtimestamp(int(file_object.findtext("./crtime"))).isoformat()
-                else:
-                    mtime = '-'
-
+        #large DFXML files pose a challenge; use iterparse to avoid crashing 
+        for event, element in etree.iterparse(dfxml_output, events = ("end",), tag="fileobject"):
+            
+            #refresh dict for each fileobject
+            file_dict = {}
+            
+            #default values; will make sure that we don't record info about non-allocated files and that we have a default timestamp value
+            good = True
+            mt = False
+            mtime = 'undated'
+            
+            for child in element:
+                
+                if child.tag == "filename":
+                    target = child.text
+                if child.tag == "name_type":
+                    if child.text != "r":
+                        element.clear()
+                        good = False
+                        break
+                if child.tag == "alloc":
+                    if child.text != "1":
+                        good = False
+                        element.clear()
+                        break
+                if child.tag == "filesize":
+                    size = child.text
+                if child.tag == "hashdigest":
+                    checksum = child.text
+                if child.tag == "mtime":
+                    mtime = child.text
+                    mt = True
+                if child.tag == "crtime" and mt == False:
+                    mtime = child.text
+            
+            if good:
                 file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
                 file_stats.append(file_dict)
+            
+            element.clear()
     
     #use custom operation for other cases    
     elif os.path.isdir(target):

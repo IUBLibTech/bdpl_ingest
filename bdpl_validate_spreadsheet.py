@@ -29,9 +29,18 @@ def main():
     column_list = 'ABCDEFGHIJKLMNOP'
     
     #compare current headers vs. template
+    errors = 0
     for i in range(0, len(template_headers)):
-        if new_headers[i] != template_headers[i]:
-            print('\n\nWARNING: Column %s has incorrect header!\n\tHeader is "%s"; SHOULD be "%s"' % (column_list[i], new_headers[i], template_headers[i]))
+        try:
+            if new_headers[i] != template_headers[i]:
+                print('\n\nWARNING: Column %s has incorrect header!\n\tHeader is "%s"; SHOULD be "%s"' % (column_list[i], new_headers[i], template_headers[i]))
+                errors += 1
+        except IndexError as e:
+            print('\n\nWARNING: %s not included.' % template_headers[i])
+            errors += 1
+    
+    if errors == 0:
+        print('\n\nNo errors with spreadsheet headers!')
     
     new_bcs = {}    
     missing_barcodes = []
@@ -47,11 +56,21 @@ def main():
         print('\n\n\nWARNING: the following rows are missing barcodes; verify if any action is needed:')
         for row in missing_barcodes:
             print('\tRow: %s' % row)
+    else:
+        print('\n\nNo Missing barcodes!'
     
     new_bcs_list = list(new_bcs.keys())
     
     #check for any duplicate barcodes in new spreadsheet
     duplicate_barcodes = [item for item, count in Counter(new_bcs_list).items() if count > 1]
+    
+    #note if any barcodes in the spreadsheet are duplicates
+    if len(duplicate_barcodes) > 0:
+        print('\n\nWARNING: spreadsheet includes duplicate barcode values:')
+        for dup in duplicate_barcodes:
+            print('\t%s\tRow: %s' % (dup, new_bcs[dup]))
+    else:
+        print('\n\nNo duplicte barcodes in spreadsheet.')
     
     #make a copy of the master workbook
     master_spreadsheet = 'Y:/spreadsheets/bdpl_master_spreadsheet.xlsx'
@@ -60,32 +79,32 @@ def main():
     if not os.path.exists('C:/temp'):
         os.mkdir('C:/temp')
     
-    shutil.copy(master_spreadsheet, master_copy)
+    try:
+        shutil.copy(master_spreadsheet, master_copy)
+    except FileNotFoundError:
+        print('\n\nUnable to access master spreadsheet at ', master_spreadsheet)
     
     #add all current barcodes into a list
-    master_wb = openpyxl.load_workbook(master_copy)
-    item_ws = master_wb['Item']
+    try:
+        master_wb = openpyxl.load_workbook(master_copy)
+        item_ws = master_wb['Item']
 
-    master_list = []
+        master_list = []
+        
+        for barcode in item_ws['A'][1:]:
+            if not barcode.value is None:
+                master_list.append(barcode.value)
+        
+        already_used = [x for x in new_bcs_list if x in master_list]
+        
+        #note if any barcodes are already in the SDA are duplicated
+        if len(already_used) > 0:
+            print('\n\nWARNING: spreadsheet includes barcodes that have already been deposited to the SDA:')
+            for dup in already_used:
+                print('\t%s\tRow: %s' % (dup, new_bcs[dup]))
+    except FileNotFoundError:
+        print('\n\nUnable to access copy of master spreadsheet at ', master_copy)
     
-    for barcode in item_ws['A'][1:]:
-        if not barcode.value is None:
-            master_list.append(barcode.value)
-    
-    already_used = [x for x in new_bcs_list if x in master_list]
-    
-    #note if any barcodes in the spreadsheet are duplicates
-    if len(duplicate_barcodes) > 0:
-        print('\n\nWARNING: spreadsheet includes duplicate barcode values:')
-        for dup in duplicate_barcodes:
-            print('\t%s\tRow: %s' % (dup, new_bcs[dup]))
-    
-    #note if any barcodes are already in the SDA are duplicated
-    if len(already_used) > 0:
-        print('\n\nWARNING: spreadsheet includes barcodes that have already been deposited to the SDA:')
-        for dup in already_used:
-            print('\t%s\tRow: %s' % (dup, new_bcs[dup]))
-
 if __name__ == '__main__':
 
     os.system('cls')
