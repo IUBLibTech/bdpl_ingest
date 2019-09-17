@@ -1,7 +1,5 @@
 @ECHO OFF
 
-REM Copy this file to %USERPROFILE%\AppData\Roaming\Microsoft\Windows\SendTo
+python C:\BDPL\scripts\copy_path.py %1
 
-SET _var=%~1
-
-<NUL (SET /P=%_var:\=/%)| CLIP
+EXIT
