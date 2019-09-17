@@ -1615,12 +1615,15 @@ def produce_dfxml(target):
             size = ''
             checksum = ''
             
-            
             for child in element:
                 
                 if child.tag == "filename":
                     target = child.text
-                    print('\rCollecting stats for: %s' % target, end='')
+                    try:
+                        print('\r', ' ' * len(previous), end='')
+                    except NameError:
+                        print('\r ', end='')
+                    print('\r\tWorking on: %s' % target, end='')
                 if child.tag == "name_type":
                     if child.text != "r":
                         element.clear()
@@ -1644,6 +1647,8 @@ def produce_dfxml(target):
             if good and not '' in file_dict.values():
                 file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
                 file_stats.append(file_dict)
+                
+            previous = target
             
             element.clear()
     
