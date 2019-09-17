@@ -1630,10 +1630,10 @@ def produce_dfxml(target):
                 if child.tag == "hashdigest":
                     checksum = child.text
                 if child.tag == "mtime":
-                    mtime = child.text
+                    mtime = datetime.datetime.utcfromtimestamp(int(child.text)).isoformat()
                     mt = True
                 if child.tag == "crtime" and mt == False:
-                    mtime = child.text
+                    mtime = datetime.datetime.utcfromtimestamp(int(child.text)).isoformat()
             
             if good:
                 file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
