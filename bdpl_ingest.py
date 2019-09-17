@@ -1620,7 +1620,7 @@ def produce_dfxml(target):
                 
                 if child.tag == "filename":
                     target = child.text
-                     print('\rCollecting stats for: %s' % target, end='')
+                    print('\rCollecting stats for: %s' % target, end='')
                 if child.tag == "name_type":
                     if child.text != "r":
                         element.clear()
