@@ -1601,6 +1601,7 @@ def produce_dfxml(target):
                 
         #for jobs other than DVD, parse dfxml to get info for later...
         #large DFXML files pose a challenge; use iterparse to avoid crashing 
+        print('\nCollecting file statistics...\n')
         for event, element in etree.iterparse(dfxml_output, events = ("end",), tag="fileobject"):
             
             #refresh dict for each fileobject
@@ -1610,11 +1611,16 @@ def produce_dfxml(target):
             good = True
             mt = False
             mtime = 'undated'
+            target = ''
+            size = ''
+            checksum = ''
+            
             
             for child in element:
                 
                 if child.tag == "filename":
                     target = child.text
+                     print('\rCollecting stats for: %s' % target, end='')
                 if child.tag == "name_type":
                     if child.text != "r":
                         element.clear()
@@ -1635,7 +1641,7 @@ def produce_dfxml(target):
                 if child.tag == "crtime" and mt == False:
                     mtime = datetime.datetime.utcfromtimestamp(int(child.text)).isoformat()
             
-            if good:
+            if good and not '' in file_dict.values():
                 file_dict = { 'name' : target, 'size' : size, 'mtime' : mtime, 'checksum' : checksum}
                 file_stats.append(file_dict)
             
