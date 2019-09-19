@@ -1634,10 +1634,16 @@ def produce_dfxml(target):
                         good = False
                         element.clear()
                         break
+                if child.tag == "unalloc":
+                    if child.text == "1":
+                        good = False
+                        element.clear()
+                        break
                 if child.tag == "filesize":
                     size = child.text
                 if child.tag == "hashdigest":
-                    checksum = child.text
+                    if child.attrib['type'] == 'md5':
+                        checksum = child.text
                 if child.tag == "mtime":
                     mtime = datetime.datetime.utcfromtimestamp(int(child.text)).isoformat()
                     mt = True
