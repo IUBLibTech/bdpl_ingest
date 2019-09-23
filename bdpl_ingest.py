@@ -49,7 +49,7 @@ def check_premis(term, version, command):
     premis_list = pickleLoad('premis_list')
     
     #see if term has been recorded at all
-    found = [dic for dic in premis_list if dic['eventType'] == term and dic['eventDetailInfo'] == command and version in dic['linkingAgentIDvalue']]
+    found = [dic for dic in premis_list if dic['eventType'] == term]
     
     #if not recorded, it hasn't been run
     if not found: 
@@ -57,7 +57,7 @@ def check_premis(term, version, command):
     else:
         #for virus scans, we will assume that completion may have either a 0 or non-zero value.  No need to run again.
         if term == 'virus check':
-            return true
+            return True
         #for other microservices, check if operation completed successfully; if so, return True, otherwise False
         else:
             if [dc for dc in found if dc['eventOutcomeDetail'] in ['0', 0]]:
