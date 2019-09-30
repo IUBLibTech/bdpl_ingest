@@ -57,7 +57,7 @@ def main():
         for row in missing_barcodes:
             print('\tRow: %s' % row)
     else:
-        print('\n\nNo Missing barcodes!'
+        print('\n\nNo Missing barcodes!')
     
     new_bcs_list = list(new_bcs.keys())
     
