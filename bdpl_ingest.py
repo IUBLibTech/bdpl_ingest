@@ -561,9 +561,9 @@ def TransferContent():
                 
                 #check if title track is missing audio--could make trouble for other tracks...
                 audio_test = {}
+                print('\nChecking audio streams...')
                 for t in titlelist:
                     cmd = "ffprobe -i %s -hide_banner -show_streams -select_streams a -loglevel error" % t
-                    
                     audio_check = subprocess.check_output(cmd, text=True)
                     audio_test[t] = audio_check
                 
