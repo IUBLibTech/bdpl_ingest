@@ -554,7 +554,36 @@ def TransferContent():
         #loop through titles and rip each one to mpeg using native streams
         for title in range(1, (titlecount+1)):
             titlelist = glob.glob(os.path.join(ffmpeg_source, "**/VIDEO_TS", "VTS_%s_*.VOB" % str(title).zfill(2)), recursive=True)
+            #be sure list is sorted
+            sorted(titlelist)
+            
             if len(titlelist) > 0:
+                
+                #check if title track is missing audio--could make trouble for other tracks...
+                audio_test = {}
+                for t in titlelist:
+                    cmd = "ffprobe -i %s -hide_banner -show_streams -select_streams a -loglevel error" % t
+                    
+                    audio_check = subprocess.check_output(cmd, text=True)
+                    audio_test[t] = audio_check
+                
+                #if there's no audio in any track, it's OK
+                if all(value == '' for value in audio_test.values()):
+                    pass
+                #if our first track lacks audio, add a dummy track
+                elif audio_test[titlelist[0]] == '':
+                    dummy_audio = os.path.join(temp_dir, 'added_silence.mpg')
+                    
+                    cmd = "ffmpeg -y -nostdin -loglevel warning -i %s -f lavfi -i anullsrc -c:v copy -c:a aac -shortest -target ntsc-dvd %s" % (titlelist[0], dummy_audio)
+                    
+                    print('\nCorrecting missing audio on first track...')
+                    
+                    subprocess.call(cmd, text=True)
+                    
+                    #replace original item from list
+                    del titlelist[0]
+                    titlelist.insert(0, dummy_audio)
+                
                 timestamp = str(datetime.datetime.now())
                 
                 ffmpegout = os.path.join(files_dir, '%s-%s.mpg' % (barcode.get(), str(title).zfill(2)))
@@ -874,9 +903,11 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
         be_ver = subprocess.check_output(['bulk_extractor', '-V'], shell=True, text=True).rstrip()
     except subprocess.CalledProcessError as e:
         be_ver = e.output.rstrip()
-        
+    
+    print('\n\tScan underway...be patient!\n')
+    
     #use default command with buklk_extractor; individuak could implement changes to use 'find' scanner at a later date
-    bulkext_command = 'bulk_extractor -x aes -x base64 -x elf -x exif -x gps -x hiberfile -x httplogs -x json -x kml -x net -x pdf -x sqlite -x winlnk -x winpe -x winprefetch -S ssn_mode=2 -o "%s" -R "%s" > "%s"' % (bulkext_dir, files_dir, bulkext_log)
+    bulkext_command = 'bulk_extractor -x aes -x base64 -x elf -x exif -x gps -x hiberfile -x httplogs -x json -x kml -x net -x pdf -x sqlite -x winlnk -x winpe -x winprefetch -S ssn_mode=2 -o -q -1 "%s" -R "%s" > "%s"' % (bulkext_dir, files_dir, bulkext_log)
     
     
     #return if b_e was run before
@@ -927,10 +958,12 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
                 shutil.copy(current_file, reports_dir)
         except OSError:
             continue
+    
+    print('\nSensitive data scan completed...')
 
 def import_csv(cursor, conn, reports_dir):
 
-    print('\nImporting siegried file to sqlite3 database...')
+    print('\n\tImporting siegried file to sqlite3 database...')
     """Import csv file into sqlite db"""
     sf_file = os.path.join(reports_dir, 'siegfried.csv')
     
@@ -964,7 +997,7 @@ def import_csv(cursor, conn, reports_dir):
 def generate_reports(cursor, html, reports_dir):
     temp_dir = bdpl_vars()['temp_dir']
     
-    print('\nGenerating format reports and writing html...')
+    print('\n\tGenerating format reports and writing html...')
     
     """Run sql queries on db to generate reports, write to csv and html"""
     full_header = ['Filename', 'Filesize', 'Date modified', 'Errors', 
@@ -1248,7 +1281,7 @@ def close_files_conns_on_exit(html, conn, cursor):
 def get_stats(files_dir, scan_started, cursor, html, siegfried_version, reports_dir, log_dir):
     """Get aggregate statistics and write to html report"""
     
-    print('\nGetting statistics about content...')
+    print('\n\tGetting statistics about content...')
     
     # get stats from sqlite db
     cursor.execute("SELECT COUNT(*) from siegfried;") # total files
@@ -1892,7 +1925,7 @@ def format_analysis(files_dir, reports_dir, log_dir, temp_dir, html):
         print('\nFile format analysis already completed. Proceeding to next operation...')
     
     else:
-        print('\nFile format identification with siegfried...') 
+        print('\n\tFile format identification with siegfried...') 
     
         #create timestamp
         timestamp = str(datetime.datetime.now())
@@ -1923,6 +1956,8 @@ def format_analysis(files_dir, reports_dir, log_dir, temp_dir, html):
     # close database connections
     cursor.close()
     conn.close()
+    
+    print('\nFormat analysis completed...')
 
 def analyzeContent():
     
