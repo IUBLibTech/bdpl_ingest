@@ -4,9 +4,6 @@ import openpyxl
 from collections import Counter
 
 def main():
-    print('\nNOTE: validating spreadsheet against template version 20190724; update script if new template is in use.')
-    
-    #get a list of barcodes in new spreadsheet inventory
     while True:
         spreadsheet = input('\nEnter Python-appropriate path to the spreadsheet: ')
     
@@ -16,7 +13,23 @@ def main():
     wb = openpyxl.load_workbook(spreadsheet)
     ws = wb['Inventory']
     
-    #make sure correct column headers are in use
+    print('\nOptions:\n\t 1 - Validate BDPL spreadsheet submitted by unit\n\t 2 - Validate barcodes on RipStation "userdata.txt" file')
+    
+    while True:
+        option = input('\nEnter your desired option (1 /2): ')
+        if option.strip() == '1':
+            validate_spreadsheet(wb, ws, spreadsheet)
+            break
+        elif option.strip() == '2':
+            validate_userdata(wb, ws, spreadsheet)
+            break
+        else:
+            continue
+
+def validate_spreadsheet(wb, ws, spreadsheet):
+    print('\nNOTE: validating spreadsheet against template version 20190724; update script if new template is in use.')
+    
+    '''make sure correct column headers are in use'''
     
     #current column headers--UPDATE IF NEEDED!
     template_headers = ['Identifier', 'Accession ID (if known)', 'Collection Title (if assigned)', 'Collection ID (if assigned)', 'Creator (if known)', 'Physical location of media', 'Source type (select from drop down or type)', 'Label transcription', 'Initial appraisal notes (including potential sensitive data)', 'Instructions for BDPL staff ', 'Restriction Statement', 'Restriction end date (YYYY-MM-DD)', 'Move directly to SDA without appraisal? ']
@@ -104,7 +117,36 @@ def main():
                 print('\t%s\tRow: %s' % (dup, new_bcs[dup]))
     except FileNotFoundError:
         print('\n\nUnable to access copy of master spreadsheet at ', master_copy)
+
+def validate_userdata(wb, ws, spreadsheet):
+    while True:
+        userdata = input('\nEnter Python-appropriate path to "userdata.txt": ')
     
+        if os.path.exists(userdata):
+            break
+    
+    #get full list of barcodes in userdata.txt
+    with open(userdata, 'r') as ud:
+        ud_list = ud.read().splitlines()
+    
+    #get list of barcodes in inventory
+    barcodes = []
+    iterrows = ws.iter_rows()
+    
+    next(iterrows)
+    
+    for row in iterrows:
+        if not row[0].value is None:
+            barcodes.append(str(row[0].value))
+            
+    bad_barcodes = [bc for bc in ud_list if not bc in barcodes]
+    
+    if len(bad_barcodes) == 0:
+        print('\nAll barcodes in userdata.txt are located in', spreadsheet)
+    else:
+        print('\nWARNING: the following barcodes are not listed in %s:' % spreadsheet)
+        print('\n\t%s' % '\n\t'.join(bad_barcodes))
+
 if __name__ == '__main__':
 
     os.system('cls')

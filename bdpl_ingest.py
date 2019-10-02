@@ -907,7 +907,7 @@ def run_bulkext(bulkext_dir, bulkext_log, files_dir, html, reports_dir):
     print('\n\tScan underway...be patient!\n')
     
     #use default command with buklk_extractor; individuak could implement changes to use 'find' scanner at a later date
-    bulkext_command = 'bulk_extractor -x aes -x base64 -x elf -x exif -x gps -x hiberfile -x httplogs -x json -x kml -x net -x pdf -x sqlite -x winlnk -x winpe -x winprefetch -S ssn_mode=2 -o -q -1 "%s" -R "%s" > "%s"' % (bulkext_dir, files_dir, bulkext_log)
+    bulkext_command = 'bulk_extractor -x aes -x base64 -x elf -x exif -x gps -x hiberfile -x httplogs -x json -x kml -x net -x pdf -x sqlite -x winlnk -x winpe -x winprefetch -S ssn_mode=2 -q -1 -o "%s" -R "%s" > "%s"' % (bulkext_dir, files_dir, bulkext_log)
     
     
     #return if b_e was run before
@@ -1764,7 +1764,7 @@ def produce_dfxml(target):
                 
                 #save this list to file just in case we crash...
                 raw_stats = "%s | %s | %s | %s | %s | %s | %s\n" % (file_target, size, mtime, ctime, atime, checksum, counter)
-                with open(temp_dfxml, 'a') as f:
+                with open(temp_dfxml, 'a', encoding='utf8') as f:
                     f.write(raw_stats)
         print('\n')
         
