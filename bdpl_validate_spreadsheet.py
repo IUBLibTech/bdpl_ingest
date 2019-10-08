@@ -27,7 +27,7 @@ def main():
             continue
 
 def validate_spreadsheet(wb, ws, spreadsheet):
-    print('\nNOTE: validating spreadsheet against template version 20190724; update script if new template is in use.')
+    print('\n\n\tNOTE: validating spreadsheet against template version 20190724; update script if new template is in use.')
     
     '''make sure correct column headers are in use'''
     
@@ -70,7 +70,7 @@ def validate_spreadsheet(wb, ws, spreadsheet):
         for row in missing_barcodes:
             print('\tRow: %s' % row)
     else:
-        print('\n\nNo Missing barcodes!')
+        print('\n\nNo missing barcodes!')
     
     new_bcs_list = list(new_bcs.keys())
     
@@ -83,7 +83,7 @@ def validate_spreadsheet(wb, ws, spreadsheet):
         for dup in duplicate_barcodes:
             print('\t%s\tRow: %s' % (dup, new_bcs[dup]))
     else:
-        print('\n\nNo duplicte barcodes in spreadsheet.')
+        print('\n\nNo duplicate barcodes in spreadsheet.')
     
     #make a copy of the master workbook
     master_spreadsheet = 'Y:/spreadsheets/bdpl_master_spreadsheet.xlsx'
@@ -115,6 +115,8 @@ def validate_spreadsheet(wb, ws, spreadsheet):
             print('\n\nWARNING: spreadsheet includes barcodes that have already been deposited to the SDA:')
             for dup in already_used:
                 print('\t%s\tRow: %s' % (dup, new_bcs[dup]))
+        else:
+            print('\n\nNo current barcodes have been previously deposited to the SDA!')
     except FileNotFoundError:
         print('\n\nUnable to access copy of master spreadsheet at ', master_copy)
 
