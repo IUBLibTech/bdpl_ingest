@@ -83,13 +83,20 @@ def main():
         
     spreadsheet = os.path.join(ship_dir, '%s_%s.xlsx' % (unit_name, shipmentDate))
     if not os.path.exists(spreadsheet):
-        print('\nWARNING: Could not locate %s in shipment folder.  Be sure spreadsheet is present and correctly named: %s_%s.xlsx and then run script again.' % (spreadsheet, unit_name, shipmentDate))
+        print('\nWARNING: Could not locate %s in shipment folder.  Be sure spreadsheet is present and correctly named (%s_%s.xlsx) and then run script again.' % (spreadsheet, unit_name, shipmentDate))
         sys.exit(1)
     
     #track any failures in this file
     failed_ingest = os.path.join(ship_dir, 'failed_ingest.txt')
     replicated = os.path.join(ship_dir, 'replicated.txt')
     analyzed = os.path.join(ship_dir, 'analyzed.txt')
+    
+    #get ripstation log (and its timestamp)
+    rs_log = os.path.join(ship_dir, 'Log.txt')
+    if not os.path.exists(rs_log):
+        print('\nWARNING: Could not locate RipStation log in shipment folder.  Be sure file is present and correctly named (Log.txt) and then run script again.')
+        sys.exit(1)
+    rs_timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(rs_log)).strftime('%Y-%m-%d')
 
     #Once we verify that we have our list of barcodes and our spreadsheet, we will loop through list
     with open(userdata, 'r') as ud:
@@ -102,6 +109,7 @@ def main():
         
         #get folder variables
         folders = bdpl_folders(unit_name, shipmentDate, item_barcode)
+        log_dir = folders['log_dir']
         
         if not check_list(replicated, item_barcode):
         
@@ -132,6 +140,15 @@ def main():
                 with open(failed_ingest, 'a') as f:
                     f.write('%s\t%s\n' % (item_barcode, str))
                 continue
+            
+            #save ripstation log information for disc to log_dir
+            ripstation_log = os.path.join(log_dir, 'ripstation.txt')
+            with open(ripstation_log, 'a') as outf:
+                outf.write('RipStation DataGrabber V1.0.35.0\n')
+                with open(rs_log, 'r') as inf:
+                    for line in inf.read().splitlines():
+                        if item_barcode in line:
+                            outf.write('%sT%s\n' % (rs_timestamp, line))
                 
             #mount .ISO so we can verify disk image type
             exitcode = mount_iso(iso_imagefile)
