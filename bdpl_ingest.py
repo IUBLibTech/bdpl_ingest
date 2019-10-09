@@ -2861,24 +2861,24 @@ def main():
     barcode = StringVar()
     barcode.set('')           
     barcodeTxt = Label(topFrame, text="Barcode:")
-    barcodeTxt.pack(in_=topFrame, side=LEFT, padx=10, pady=10)
+    barcodeTxt.pack(in_=topFrame, side=LEFT, padx=(10,0), pady=10)
     barcodeEntry = Entry(topFrame, width=20, textvariable=barcode)
-    barcodeEntry.pack(in_=topFrame, side=LEFT, padx=10, pady=10)
+    barcodeEntry.pack(in_=topFrame, side=LEFT, padx=(0,10), pady=10)
     
     unit = StringVar()
     unit.set('')
     unitTxt = Label(topFrame, text="Unit:")
-    unitTxt.pack(in_=topFrame, side=LEFT, padx=10, pady=10)
+    unitTxt.pack(in_=topFrame, side=LEFT, padx=(10,0), pady=10)
     unitEntry = Entry(topFrame, width=5, textvariable=unit)
-    unitEntry.pack(in_=topFrame, side=LEFT, padx=10, pady=10)
+    unitEntry.pack(in_=topFrame, side=LEFT, padx=(0,10), pady=10)
 
     shipLabel = Label(topFrame, text="Shipment ID: ")
-    shipLabel.pack(in_=topFrame, side=LEFT, padx=10, pady=10)
+    shipLabel.pack(in_=topFrame, side=LEFT, padx=(10,0), pady=10)
     
     #User can either select an existng shipment date or add new one
     global unit_shipment_date
     unit_shipment_date = ttk.Combobox(topFrame, width=20, postcommand= lambda: updateCombobox(unit.get(), unit_shipment_date))
-    unit_shipment_date.pack(in_=topFrame, side=LEFT, padx=10, pady=10)
+    unit_shipment_date.pack(in_=topFrame, side=LEFT, padx=(0,10), pady=10)
     
     #alternative approach: text entry
     # unit_shipment_date= StringVar()
