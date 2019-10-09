@@ -120,7 +120,7 @@ def main():
             
             #write premis information for disk image creation.  Even if image is unreadable, we assume that this operation was successful
             premis_list = pickleLoad('premis_list', folders, item_barcode)
-            premis_list.append(premis_dict(timestamp, 'disk image creation', 0, 'RipStation BR6-7604 batch operation', 'Extracted a disk image from the physical information carrier.', 'RipStation v.4.0'))
+            premis_list.append(premis_dict(timestamp, 'disk image creation', 0, 'RipStation BR6-7604 ISO image batch operation', 'Extracted a disk image from the physical information carrier.', 'RipStation DataGrabber V1.0.35.0'))
             pickleDump('premis_list', premis_list, folders)
             
             #run 'first_run' function to get metadata and create folders; if 'false' return
