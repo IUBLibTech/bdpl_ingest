@@ -64,6 +64,8 @@ def check_list(list_name, item_barcode):
 
 def main():
 
+    update_software()
+    
     while True:
         unit_name = input('\nEnter unit abbreviation: ')
         
@@ -110,6 +112,7 @@ def main():
         #get folder variables
         folders = bdpl_folders(unit_name, shipmentDate, item_barcode)
         log_dir = folders['log_dir']
+        files_dir = folders['files_dir']
         
         if not check_list(replicated, item_barcode):
         
@@ -221,8 +224,14 @@ def main():
                 imagefile = '%s.dd' % os.path.splitext(iso_imagefile)[0]
                 os.rename(iso_imagefile, imagefile)
             
-            with open(replicated, 'a') as f:
-                f.write('%s\n' % item_barcode)
+            if checkFiles(files_dir):
+                with open(replicated, 'a') as f:
+                    f.write('%s\n' % item_barcode)
+            else:
+                print('\nWARNING: failed to replicate files!  Moving on to next item...')
+                with open(failed_ingest, 'a') as f:
+                    f.write('%s\tFailed to replicate files\n' % item_barcode)
+                continue
             
         if not check_list(analyzed, item_barcode):
             #now set variables for analysis procedures

@@ -656,7 +656,7 @@ def normalize_dvd_content(folders, item_barcode, titlecount, drive_letter):
             print('\n\tChecking audio streams...')
             for t in titlelist:
                 cmd = "ffprobe -i %s -hide_banner -show_streams -select_streams a -loglevel error" % t
-                audio_check = subprocess.check_output(cmd, text=True)
+                audio_check = subprocess.call(cmd, text=True)
                 audio_test[t] = audio_check
             
             #if there's no audio in any track, it's OK
@@ -1695,8 +1695,11 @@ def checkFiles(some_dir):
     
     #make sure there are files in the 'files' directory
     for dirpath, dirnames, contents in os.walk(some_dir):
-        if len(contents) > 0:
-            return True
+        for file in contents:
+            if os.path.isfile(os.path.join(dirpath, file)):
+                return True
+            else: 
+                continue
             
     print('\n\nError; no files located at %s. Check settings and run again; you may need to manually copy or extract files.' % some_dir)
     return False
@@ -2809,11 +2812,7 @@ def updateCombobox(unit_name, unit_shipment_date):
     
     unit_shipment_date['values'] = comboList
 
-
-def main():
-    
-    #global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, source5, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, shipmentDateList, noteFail, re_analyze, other_device
-    
+def update_software()
     #make sure PRONOM and antivirus signatures are up to date
     sfup = 'sf -update'
     fresh_up = 'freshclam'
@@ -2840,7 +2839,13 @@ def main():
         subprocess.check_output(fresh_up, shell=True, text=True)
         
         print('\nUpdate complete!  Time to ingest some date...')
+
+def main():
     
+    #global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, source5, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, shipmentDateList, noteFail, re_analyze, other_device
+    
+    update_software()
+      
     window = Tk()
     window.title("Indiana University Library Born-Digital Preservation Lab")
     window.geometry('650x750')
