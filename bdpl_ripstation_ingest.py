@@ -62,6 +62,10 @@ def check_list(list_name, item_barcode):
                 continue
         return False
 
+def write_fail(failed_ingest, message):
+    with open(failed_ingest, 'a') as f:
+        f.write(message)
+
 def main():
 
     update_software()
@@ -113,18 +117,34 @@ def main():
         folders = bdpl_folders(unit_name, shipmentDate, item_barcode)
         log_dir = folders['log_dir']
         files_dir = folders['files_dir']
+        image_dir = folders['image_dir']
+        iso_imagefile = os.path.join(image_dir, '%s.iso' % item_barcode)
+        imagefile = '%s.dd' % os.path.splitext(iso_imagefile)[0]
+        
+        #if item has already failed, skip it.
+        if check_list(failed_ingest, item_barcode):
+            continue
         
         if not check_list(replicated, item_barcode):
         
             #make sure disk image exists
             print('\nCHECKING IF DISK IMAGE EXISTS...')
-            image_dir = folders['image_dir']
-            iso_imagefile = os.path.join(image_dir, '%s.iso' % item_barcode)
+
+            #if .iso file doesn't exist, check to see if we've already created a .dd file or if ripstation created .mdf/.mds files
             if not os.path.exists(iso_imagefile):
-                print('\nWARNING: disk image does not exist!  Moving on to next item...')
-                with open(failed_ingest, 'a') as f:
-                    f.write('%s\tDisk image does not exist\n' % item_barcode)
-                continue
+                if os.path.exists(imagefile):
+                    print('\n.ISO file already changed to .DD; converting back to complete operations.')
+                    os.rename(imagefile, iso_imagefile)
+                    
+                elif os.path.exists(os.path.join(image_dir, '%s.mdf' % item_barcode)):
+                    print('\nWARNING: item is Compact Disc Digital Audio; unable to transfer using RipStation DataGrabber.')
+                    write_fail(failed_ingest, '%s\tDisc is CDDA; transfer using original RipStation\n' % item_barcode)
+                    continue
+                    
+                else:
+                    print('\nWARNING: disk image does not exist!  Moving on to next item...')
+                    write_fail(failed_ingest, '%s\tDisk image does not exist\n' % item_barcode)
+                    continue
                 
             #get timestamp for disk image
             timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(iso_imagefile)).isoformat()
@@ -140,25 +160,24 @@ def main():
             status, str = first_run(unit_name, shipmentDate, item_barcode, gui_vars)
             if not status:
                 print('\nWARNING: issue with spreadsheet metadata!  Moving on to next item...')
-                with open(failed_ingest, 'a') as f:
-                    f.write('%s\t%s\n' % (item_barcode, str))
+                write_fail(failed_ingest, '%s\t%s\n' % (item_barcode, str))
                 continue
             
-            #save ripstation log information for disc to log_dir
+            #save ripstation log information for disc to log_dir.  Make sure it's only written once...
             ripstation_log = os.path.join(log_dir, 'ripstation.txt')
-            with open(ripstation_log, 'a') as outf:
-                outf.write('RipStation DataGrabber V1.0.35.0\n')
-                with open(rs_log, 'r') as inf:
-                    for line in inf.read().splitlines():
-                        if item_barcode in line:
-                            outf.write('%sT%s\n' % (rs_timestamp, line))
-                
+            if not os.path.exists(ripstation_log):
+                with open(ripstation_log, 'a') as outf:
+                    outf.write('RipStation DataGrabber V1.0.35.0\n')
+                    with open(rs_log, 'r') as inf:
+                        for line in inf.read().splitlines():
+                            if item_barcode in line:
+                                outf.write('%sT%s\n' % (rs_timestamp, line))
+            
             #mount .ISO so we can verify disk image type
             exitcode = mount_iso(iso_imagefile)
             if exitcode != 0:
                 print('\nWARNING: failed to mount disk image!  Moving on to next item...')
-                with open(failed_ingest, 'a') as f:
-                    f.write('%s\tFailed to mount disk image\n' % item_barcode)
+                write_fail(failed_ingest, '%s\tFailed to mount disk image\n' % item_barcode)
                 continue
             
             #set mediaStatus variable: confirms that 'media' (mounted disk image) is present; required by bdpl_ingest functions
@@ -179,12 +198,10 @@ def main():
                 exitcode = dismount_iso(iso_imagefile)
                 if exitcode != 0:
                     print('\nWARNING: failed to dismount disk image!  Moving on to next item...')
-                    with open(failed_ingest, 'a') as f:
-                        f.write('%s\tFailed to dismount disk image\n' % item_barcode)
+                    write_fail(failed_ingest, '%s\tFailed to dismount disk image\n' % item_barcode)
                     continue
                 
                 #rename to '.dd' file extension
-                imagefile = '%s.dd' % os.path.splitext(iso_imagefile)[0]
                 os.rename(iso_imagefile, imagefile)
                 
                 #get info on the disk image (fsstat, ils, mmls, and disktype)
@@ -216,12 +233,10 @@ def main():
                 exitcode = subprocess.call('powershell "%s" > null 2>&1' % cmd)
                 if exitcode != 0:
                     print('\nWARNING: failed to dismount disk image!  Moving on to next item...')
-                    with open(failed_ingest, 'a') as f:
-                        f.write('%s\tFailed to dismount disk image\n' % item_barcode)
+                    write_fail(failed_ingest, '%s\tFailed to dismount disk image\n' % item_barcode)
                     continue
                 
                 #rename to '.dd' file extension
-                imagefile = '%s.dd' % os.path.splitext(iso_imagefile)[0]
                 os.rename(iso_imagefile, imagefile)
             
             if checkFiles(files_dir):
@@ -229,8 +244,7 @@ def main():
                     f.write('%s\n' % item_barcode)
             else:
                 print('\nWARNING: failed to replicate files!  Moving on to next item...')
-                with open(failed_ingest, 'a') as f:
-                    f.write('%s\tFailed to replicate files\n' % item_barcode)
+                write_fail(failed_ingest, '%s\tFailed to replicate files\n' % item_barcode)
                 continue
             
         if not check_list(analyzed, item_barcode):
@@ -240,6 +254,7 @@ def main():
             #send content through analysis
             analyzeContent(unit_name, shipmentDate, item_barcode, analysis_vars)
             
+            #TO DO: need to verify if procedures actually completed...
             with open(analyzed, 'a') as f:
                 f.write('%s\n' % item_barcode)
                 
