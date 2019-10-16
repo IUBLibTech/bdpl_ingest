@@ -158,7 +158,7 @@ def main():
             if exitcode != 0:
                 print('\nWARNING: failed to mount disk image!  Moving on to next item...')
                 with open(failed_ingest, 'a') as f:
-                    f.write('%s\tFailed to mount disk image\n' % (item_barcode, str))
+                    f.write('%s\tFailed to mount disk image\n' % item_barcode)
                 continue
             
             #set mediaStatus variable: confirms that 'media' (mounted disk image) is present; required by bdpl_ingest functions
@@ -180,7 +180,7 @@ def main():
                 if exitcode != 0:
                     print('\nWARNING: failed to dismount disk image!  Moving on to next item...')
                     with open(failed_ingest, 'a') as f:
-                        f.write('%s\tFailed to dismount disk image\n' % (item_barcode, str))
+                        f.write('%s\tFailed to dismount disk image\n' % item_barcode)
                     continue
                 
                 #rename to '.dd' file extension
@@ -217,7 +217,7 @@ def main():
                 if exitcode != 0:
                     print('\nWARNING: failed to dismount disk image!  Moving on to next item...')
                     with open(failed_ingest, 'a') as f:
-                        f.write('%s\tFailed to dismount disk image\n' % (item_barcode, str))
+                        f.write('%s\tFailed to dismount disk image\n' % item_barcode)
                     continue
                 
                 #rename to '.dd' file extension

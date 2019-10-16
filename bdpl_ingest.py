@@ -2812,7 +2812,7 @@ def updateCombobox(unit_name, unit_shipment_date):
     
     unit_shipment_date['values'] = comboList
 
-def update_software()
+def update_software():
     #make sure PRONOM and antivirus signatures are up to date
     sfup = 'sf -update'
     fresh_up = 'freshclam'
