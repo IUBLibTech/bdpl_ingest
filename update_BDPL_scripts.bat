@@ -10,6 +10,4 @@ git pull
 
 ICACLS "C:\BDPL\scripts-test\*" /q /c /t /reset
 
-explorer ..
-
 EXIT
