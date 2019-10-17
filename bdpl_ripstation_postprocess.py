@@ -74,7 +74,7 @@ def main():
                     present = True
                     break
             
-           for item in replicated_list:
+            for item in replicated_list:
                 if item_barcode in item:
                     print('\n\tStep 1: Replication completed.')
                     break
@@ -94,6 +94,8 @@ def main():
             
             if not present:
                 print('\nThis item was not included in the RipStation batch operation.')
+            
+            pyperclip.copy(item_barcode)
             
         else:
             print('\n%s does not exist.  Please enter a new barcode.' % target)
