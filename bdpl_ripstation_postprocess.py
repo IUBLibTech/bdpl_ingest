@@ -25,12 +25,27 @@ def main():
     analyzed = os.path.join(ship_dir, 'analyzed.txt')
     userdata = os.path.join(ship_dir, 'userdata.txt')
     
-    missing = [x for x in [failed_ingest, replicated, analyzed, userdata] if not os.path.exists(x)]
+    missing = [x for x in [replicated, analyzed, userdata] if not os.path.exists(x)]
     if len(missing) > 0:
         print('\nWARNING: the following file(s) are missing from %s:\n' % ship_dir)
         print('\t%s' % '\n\t'.join(missing))
         print('\nRecover files and run bdpl_ripstation_postprocess again.')
         sys.exit(1)
+        
+    with open(replicated, 'r') as f:
+        replicated_list = f.read().splitlines()
+    
+    with open(analyzed, 'r') as f:
+        analyzed_list = f.read().splitlines()
+    
+    if os.path.exists(failed_ingest):
+        with open(failed_ingest, 'r') as f:
+            failed_list = f.read().splitlines()
+    else:
+        failed_list = []
+        
+    with open(userdata, 'r') as f:
+        data_list = f.read().splitlines()
     
     newscreen()
     
@@ -52,30 +67,28 @@ def main():
             
             print('\n----------------------------------------------------------\n\nReviewing %s' % item_barcode)
             
+            #make sure barcode was in our original userdata.txt file
             present = False
-            with open(userdata, 'r') as f:
-                for item in f.read().splitlines():
-                    if item_barcode in item:
-                        present = True
-                        break
+            for item in data_list:
+                if item_barcode in item:
+                    present = True
+                    break
             
-            with open(replicated, 'r') as f:
-                for item in f.read().splitlines():
-                    if item_barcode in item:
-                        print('\n\tStep 1: Replication completed.')
-                        break
+           for item in replicated_list:
+                if item_barcode in item:
+                    print('\n\tStep 1: Replication completed.')
+                    break
             
-            with open(analyzed, 'r') as f:
-                for item in f.read().splitlines():
-                    if item_barcode in item:   
-                        print('\n\tStep 2: Analysis completed.')
-                        break
-                        
-            with open(failed_ingest, 'r') as f:
-                for item in f.read().splitlines():
-                    if item_barcode in item:
-                        print('\n\tWARNING: %s' % item.split('\t')[1])
-                        success = False
+            for item in analyzed_list:
+                if item_barcode in item:   
+                    print('\n\tStep 2: Analysis completed.')
+                    break
+                    
+            for item in failed_list:
+                if item_barcode in item:
+                    print('\n\t*****WARNING: %s*****' % item.split('\t')[1])
+                    success = False
+            
             if not success:
                 print('\n\t***Determine if additional attempt to recover and analyse data is required***')
             
