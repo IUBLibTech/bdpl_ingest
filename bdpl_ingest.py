@@ -38,6 +38,7 @@ import time
 import openpyxl
 import glob
 import hashlib
+import psutil
 
 # from dfxml project
 import Objects
@@ -1959,12 +1960,16 @@ def disk_image_info(folders, item_barcode):
     
     timestamp = str(datetime.datetime.now())
     try:
-        exitcode = subprocess.call(fsstat_command, shell=True, text=True, timeout=60)
-        
+        exitcode = subprocess.call(fsstat_command, shell=True, text=True, timeout=60)   
     except subprocess.TimeoutExpired:
+        #if there was output before timeout, then rerun command
         if os.path.getsize(fsstat_output) > 0:
             exitcode = subprocess.call(fsstat_command, shell=True, text=True)
+        #if the command did nothing, kill the process and report as a failure
         else:
+            for proc in psutil.process_iter():
+                if proc.name() == 'fsstat.exe':
+                    psutil.Process(proc.pid).terminate()
             exitcode = 1
         
     premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, fsstat_command, 'Determined range of meta-data values (inode numbers) and content units (blocks or clusters)', fsstat_ver))
@@ -1978,9 +1983,14 @@ def disk_image_info(folders, item_barcode):
     try:
         exitcode = subprocess.call(ils_command, shell=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
+        #if there was output before timeout, then rerun command
         if os.path.getsize(ils_output) > 0:
             exitcode = subprocess.call(ils_command, shell=True, text=True)
+        #if the command did nothing, kill the process and report as a failure
         else:
+            for proc in psutil.process_iter():
+                if proc.name() == 'ils.exe':
+                    psutil.Process(proc.pid).terminate()
             exitcode = 1
     
     premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, ils_command, 'Documented all inodes found on disk image.', ils_ver))

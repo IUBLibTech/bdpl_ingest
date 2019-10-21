@@ -25,6 +25,7 @@ import time
 import openpyxl
 import glob
 import hashlib
+import psutil
 
 # from dfxml project
 import Objects
