@@ -157,10 +157,10 @@ def main():
             #run 'first_run' function to get metadata and create folders; if 'false' return
             print('\nLOADING METADATA AND CREATING FOLDERS...')
             gui_vars = {'platform' : 'bdpl_ripstation'}
-            status, str = first_run(unit_name, shipmentDate, item_barcode, gui_vars)
+            status, msg = first_run(unit_name, shipmentDate, item_barcode, gui_vars)
             if not status:
                 print('\nWARNING: issue with spreadsheet metadata!  Moving on to next item...')
-                write_fail(failed_ingest, '%s\t%s\n' % (item_barcode, str))
+                write_fail(failed_ingest, '%s\t%s\n' % (item_barcode, msg))
                 continue
             
             #save ripstation log information for disc to log_dir.  Make sure it's only written once...
