@@ -1990,16 +1990,14 @@ def disk_image_info(folders, item_barcode):
         
         for mm in mmls_info:
             temp = {}
-            for dt in dt_info:
-                if '{} sectors from {}'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt:
-                    if 'file system' in dt:
-                        fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
-                        temp['start'] = mm[0].split()[2]
-                        temp['desc'] = fsname
-                        temp['slot'] = mm[0].split()[1]
-                        #now save this dictionary to our list of partition info
-                        if not temp in partition_info_list:
-                            partition_info_list.append(temp)
+            if [dt for dt in dt_info if 'file system' in dt and ', {} sectors from {})'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt]:
+                fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
+                temp['start'] = mm[0].split()[2]
+                temp['desc'] = fsname
+                temp['slot'] = mm[0].split()[1]
+                #now save this dictionary to our list of partition info
+                if not temp in partition_info_list:
+                    partition_info_list.append(temp)
         
         pickleDump('partition_info_list', partition_info_list, folders)
                                 
