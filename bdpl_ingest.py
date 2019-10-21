@@ -474,7 +474,7 @@ def carvefiles(tool, folders, outfolder, carve_ver, partition, item_barcode):
         else:
             carve_cmd = 'tsk_recover -a -o %s %s %s' % (partition, imagefile, outfolder)
         
-    print('\n\n\tTOOL: %s\n\n\tSOURCE: %s \n\tDESTINATION: %s\n' % (tool, outfolder, imagefile))
+    print('\n\n\tTOOL: %s\n\n\tSOURCE: %s \n\tDESTINATION: %s\n' % (tool, imagefile, outfolder))
     
     timestamp = str(datetime.datetime.now())  
     exitcode = subprocess.call(carve_cmd, shell=True)
