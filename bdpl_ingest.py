@@ -405,8 +405,8 @@ def disk_image_replication(folders, item_barcode):
     
     #now get information on filesystems and (if present) partitions.  We will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
     secureCopy_list = ['udf', 'iso9660']
-    unhfs_list = ['osx', 'hfs', 'apple', 'apple_hfs', 'mfs']
-    tsk_list = ['ntfs', 'fat', 'fat12', 'fat16', 'fat32', 'exfat', 'ext2', 'ext3', 'ext4', 'ufs', 'ufs1', 'ufs2', 'ext', 'yaffs2', 'hfs plus', 'hfs+']
+    unhfs_list = ['osx', 'hfs', 'apple', 'apple_hfs', 'mfs', 'hfs plus']
+    tsk_list = ['ntfs', 'fat', 'fat12', 'fat16', 'fat32', 'exfat', 'ext2', 'ext3', 'ext4', 'ufs', 'ufs1', 'ufs2', 'ext', 'yaffs2', 'hfs+']
     
     #recover lists
     fs_list = pickleLoad('fs_list', folders, item_barcode)
