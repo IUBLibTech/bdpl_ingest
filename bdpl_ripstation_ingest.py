@@ -202,7 +202,13 @@ def main():
                     continue
                 
                 #rename to '.dd' file extension
+                timestamp = str(datetime.datetime.now())
                 os.rename(iso_imagefile, imagefile)
+                
+                #document change to filename
+                premis_list = pickleLoad('premis_list', folders, item_barcode)
+                premis_list.append(premis_dict(timestamp, 'filename change', 0, 'os.rename(%s, %s)'  (iso_imagefile, imagefile), 'Modified the filename, changing extension from .ISO to .DD to ensure consistency with IUL BDPL practices', 'Python %s' % sys.version.split()[0]))
+                pickleDump('premis_list', premis_list, folders)
                 
                 #get info on the disk image (fsstat, ils, mmls, and disktype)
                 disk_image_info(folders, item_barcode)
