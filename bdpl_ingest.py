@@ -1958,8 +1958,15 @@ def disk_image_info(folders, item_barcode):
     fsstat_command = 'fsstat %s > %s 2>&1' % (imagefile, fsstat_output)
     
     timestamp = str(datetime.datetime.now())
-    exitcode = subprocess.call(fsstat_command, shell=True, text=True)
-    
+    try:
+        exitcode = subprocess.call(fsstat_command, shell=True, text=True, timeout=60)
+        
+    except subprocess.TimeoutExpired:
+        if os.path.getsize(fsstat_output) > 0:
+            exitcode = subprocess.call(fsstat_command, shell=True, text=True)
+        else:
+            exitcode = 1
+        
     premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, fsstat_command, 'Determined range of meta-data values (inode numbers) and content units (blocks or clusters)', fsstat_ver))
 
     #run ils to document inode information
@@ -1968,7 +1975,13 @@ def disk_image_info(folders, item_barcode):
     ils_command = 'ils -e %s > %s 2>&1' % (imagefile, ils_output)
     
     timestamp = str(datetime.datetime.now())
-    exitcode = subprocess.call(ils_command, shell=True, text=True) 
+    try:
+        exitcode = subprocess.call(ils_command, shell=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        if os.path.getsize(ils_output) > 0:
+            exitcode = subprocess.call(ils_command, shell=True, text=True)
+        else:
+            exitcode = 1
     
     premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, ils_command, 'Documented all inodes found on disk image.', ils_ver))
     
