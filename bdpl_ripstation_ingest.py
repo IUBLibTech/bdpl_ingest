@@ -119,8 +119,15 @@ def main():
         log_dir = folders['log_dir']
         files_dir = folders['files_dir']
         image_dir = folders['image_dir']
+        temp_dir = folders['temp_dir']
         iso_imagefile = os.path.join(image_dir, '%s.iso' % item_barcode)
         imagefile = '%s.dd' % os.path.splitext(iso_imagefile)[0]
+        jobType_file = os.path.join(temp_dir, 'jobtype.txt')
+        
+        #get jobType if already recorded
+        if os.path.exists(jobType_file):
+            with open(jobType_file, 'rb') as f:
+                jobType = pickle.load(f)
         
         #if item has already failed, skip it.
         if check_list(failed_ingest, item_barcode):
@@ -195,6 +202,9 @@ def main():
             if titlecount == 0:
                 jobType = 'Disk_image'
                 
+                with open(jobType_file, 'wb') as f:
+                    pickle.dump(jobType, f)
+                
                 #dismount disk image
                 exitcode = dismount_iso(iso_imagefile)
                 if exitcode != 0:
@@ -230,6 +240,9 @@ def main():
                 
             else:
                 jobType = 'DVD'
+                
+                with open(jobType_file, 'wb') as f:
+                    pickle.dump(jobType, f)
                 
                 #create .MPG videos for all titles on disk
                 normalize_dvd_content(folders, item_barcode, titlecount, drive_letter)
