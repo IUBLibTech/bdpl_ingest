@@ -39,10 +39,17 @@ import openpyxl
 import glob
 import hashlib
 import psutil
+import chardet
 
 # from dfxml project
 import Objects
 
+def get_encoding(input):
+    with open(input, 'rb') as f:
+        result = chardet.detect(f.read())
+    
+    return result['encoding']
+    
 def check_premis(term, folders, item_barcode):
     #check to see if an event is already in our premis list--i.e., it's been successfully completed.  Currently only used for most resource-intensive operations: virus scheck, sensitive data scan, format id, and checksum calculation.
     
@@ -1939,10 +1946,12 @@ def disk_image_info(folders, item_barcode):
     premis_list.append(premis_dict(timestamp, 'forensic feature analysis', exitcode, disktype_command, 'Determined disk image file system information.', 'disktype v9'))
     
     #take disktype output; print to screen and get a list  of all partition information
-    with open(disktype_output, 'r', encoding='utf8') as f:
+    charenc = get_encoding(disktype_output)
+    
+    with open(disktype_output, 'r', encoding=charenc) as f:
         print(f.read(), end="")
     
-    with open(disktype_output, 'r', encoding='utf8') as f:
+    with open(disktype_output, 'r', encoding=charenc) as f:
         dt_info = f.read().split('Partition ')
 
     fs_list = []
