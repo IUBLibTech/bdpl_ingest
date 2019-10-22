@@ -10,7 +10,7 @@ if "%2."=="." GOTO No1
 
 
 setlocal EnableDelayedExpansion
-IF NOT EXIST Y: (
+IF NOT EXIST W: (
   ECHO Connecting to Archiver Spool location...
   ECHO.
   REM Get username
@@ -19,7 +19,7 @@ IF NOT EXIST Y: (
   REM Server passed in as CMD.EXE arg
   
   REM Connect to shared drive
-  NET USE Y: %1 /user:ads\!_username! *
+  NET USE W: %1 /user:ads\!_username! *
 )
 
 setlocal EnableDelayedExpansion

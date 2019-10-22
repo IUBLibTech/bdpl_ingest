@@ -86,7 +86,7 @@ def validate_spreadsheet(wb, ws, spreadsheet):
         print('\n\nNo duplicate barcodes in spreadsheet.')
     
     #make a copy of the master workbook
-    master_spreadsheet = 'Y:/spreadsheets/bdpl_master_spreadsheet.xlsx'
+    master_spreadsheet = 'W:/spreadsheets/bdpl_master_spreadsheet.xlsx'
     master_copy = os.path.join('C:/temp', 'bdpl_master_copy.xlsx')
     
     if not os.path.exists('C:/temp'):
