@@ -58,12 +58,12 @@ def main():
         else:
             target = os.path.join(ship_dir, item_barcode)
         
+        newscreen()
+        
         #if barcode folder exists in shipment, check success/failure:
         if os.path.exists(target):
             
             success = True
-            
-            newscreen()
             
             print('\n----------------------------------------------------------\n\nReviewing %s' % item_barcode)
             
@@ -95,11 +95,11 @@ def main():
             if not present:
                 print('\nThis item was not included in the RipStation batch operation.')
             
-            pyperclip.copy(item_barcode)
-            
         else:
-            print('\n%s does not exist.  Please enter a new barcode.' % target)
+            print('\nFolder %s was not created.  Determine if barcode was missing or if additional attempt to recover data is necessary.' % target)
             continue
+        
+        pyperclip.copy(item_barcode)
 
 
 if __name__ == '__main__':
