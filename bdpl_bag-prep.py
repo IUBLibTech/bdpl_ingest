@@ -12,6 +12,9 @@ import csv
 from lxml import etree
 import uuid
 
+from bdpl_ingest import md5
+from bdpl_ingest import return_spreadsheet_row
+
 
 def list_write(list_name, barcode, message=None):
     with open(list_name, 'a') as current_list:
@@ -44,12 +47,6 @@ def get_size(start_path):
                     total_size += os.path.getsize(fp)
     return total_size
 
-def md5(fname):
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
 
 def raw_text(text):
     """Returns a raw string representation of text"""
@@ -253,7 +250,7 @@ def main():
     #make sure column headings are correct; exit if they don't match targets
     if ['Appraisal results', 'Source type', 'Label transcription', 'End Date'] != [ws['AB1'].value, ws['G1'].value, ws['H1'].value, ws['W1'].value]:
         print('\n\nERROR: SPREADSHEET COLUMNS ARE NOT IN CORRECT ORDER')
-        print('Current headings:\n -AA1 (Appraisal results) = %s\n - G1 (Source type) = %s\n - H1 (Label transcription) = %s\n - I1 (Initial appraisal notes) = %s' % (ws['AB1'].value, ws['G1'].value, ws['H1'].value, ws['W1'].value))
+        print('Current headings:\n -AB1 (Appraisal results) = %s\n - G1 (Source type) = %s\n - H1 (Label transcription) = %s\n - I1 (Initial appraisal notes) = %s' % (ws['AB1'].value, ws['G1'].value, ws['H1'].value, ws['W1'].value))
         sys.exit(1)
 
     #we only want to run these steps the first time through...
@@ -843,11 +840,32 @@ def main():
                 earliest_date = str(row[21].value) 
                 latest_date = str(row[22].value)
                 
-                #write information on the specfic barcode
-                rowlist = [barcode, unit, shipmentID, coll_title, coll_id, creator, source_type, label_transcript, appraisal_notes, earliest_date, latest_date, restrict_stmt, restrict_end_date, migration_date, sip_creation_date, extracted_no, extracted_size, SIP_dict['size'], SIP_dict['md5'], SIP_dict['filename'], access_option]
+                #determine appropriate row: overwrite if already existing or add new row, otherwise
+                newrow = return_spreadsheet_row(item_ws, barcode)
                 
-                #append list and save
-                item_ws.append(rowlist)   
+                #write information on the specfic barcode
+                item_ws.cell(row=newrow, column=1).value = barcode
+                item_ws.cell(row=newrow, column=2).value = unit
+                item_ws.cell(row=newrow, column=3).value = shipmentID
+                item_ws.cell(row=newrow, column=4).value = coll_title
+                item_ws.cell(row=newrow, column=5).value = coll_id
+                item_ws.cell(row=newrow, column=6).value = creator
+                item_ws.cell(row=newrow, column=7).value = source_type
+                item_ws.cell(row=newrow, column=8).value = label_transcript
+                item_ws.cell(row=newrow, column=9).value = appraisal_notes
+                item_ws.cell(row=newrow, column=10).value = earliest_date
+                item_ws.cell(row=newrow, column=11).value = latest_date
+                item_ws.cell(row=newrow, column=12).value = restrict_stmt
+                item_ws.cell(row=newrow, column=13).value = restrict_end_date
+                item_ws.cell(row=newrow, column=14).value = migration_date
+                item_ws.cell(row=newrow, column=15).value = sip_creation_date
+                item_ws.cell(row=newrow, column=16).value = extracted_no
+                item_ws.cell(row=newrow, column=17).value = extracted_size
+                item_ws.cell(row=newrow, column=18).value = SIP_dict['size']
+                item_ws.cell(row=newrow, column=19).value = SIP_dict['md5']
+                item_ws.cell(row=newrow, column=20).value = SIP_dict['filename']
+                item_ws.cell(row=newrow, column=21).value = access_option
+                  
                 master_wb.save(master_spreadsheet)
                 
                 #add info to cumulative stats for shipment

@@ -76,6 +76,21 @@ def check_premis(term, folders, item_barcode):
             else:
                 return False
 
+def check_item_status(folders, item_barcode):
+
+    temp_dir = folders['temp_dir']
+
+    #If a 'done' file exists, we know the whole process was completed
+    done_file = os.path.join(temp_dir, 'done.txt')
+    if os.path.exists(done_file): 
+        print('\n\nNOTE: this item barcode has completed the entire ingest workflow.  Consult with the digital preservation librarian if you believe additional procedures are needed.')
+    #if no 'done' file, see where we are with the item...
+    else:
+        premis_list = pickleLoad('premis_list', folders, item_barcode)
+        if len(premis_list) > 0:
+            print('\n\nIngest of item has been initiated; the following procedures have been completed:\n\t', '\n\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list)))))
+
+
 def first_run(unit_name, shipmentDate, item_barcode, gui_vars):
     #this function only runs when a record is loaded for the first time.
 
@@ -96,8 +111,11 @@ def first_run(unit_name, shipmentDate, item_barcode, gui_vars):
     #check that metadata exists in spreadsheet, create a dict of associated values, and check to see if barcode was already ingested
     if not load_metadata(folders, item_barcode, spreadsheet):
         return False, "spreadsheet metadata doesn't exist"
+        
+    #check if item has already been completed or, if started, what procedures have been completed
+    check_item_status(folders, item_barcode)
     
-    #write metadata to gui if we are using bdpl_ingest (skip for bdpl_ripstation_ingest)
+    #write metadata to gui if we are using bdpl_ingest (skip for bdpl_ripstation_ingest and bdpl_legacy)
     if gui_vars['platform'] == 'bdpl_ingest':
         metadata_to_gui(gui_vars, folders, item_barcode)
 
@@ -274,8 +292,9 @@ def secureCopy(file_source, folders, item_barcode):
     #capture premis
     premis_list = pickleLoad('premis_list', folders, item_barcode)
     premis_list.append(premis_dict(timestamp, 'replication', exitcode, copycmd, 'Created a copy of an object that is, bit-wise, identical to the original.', migrate_ver))
-    pickleDump('premis_list', premis_list, folders)
-    
+    pickleDump('premis_list', premis_list, folders)       
+        
+
     print('\n\tFile replication completed; proceed to content analysis.')
 
 def ddrescue_image(folders, item_barcode, sourceDevice, other_device):
@@ -408,7 +427,7 @@ def disk_image_replication(folders, item_barcode):
     #set our software versions for unhfs and tsk_recover, just in case...
     cmd = 'unhfs 2>&1'
     unhfs_carve_ver = subprocess.check_output(cmd, shell=True, text=True).splitlines()[0]
-    tsk_carve_ver = 'tsk_recover: %s ' % subprocess.check_output('tsk_recover -V').strip()
+    tsk_carve_ver = 'tsk_recover: %s ' % subprocess.check_output('tsk_recover -V', text=True).strip()
     
     #now get information on filesystems and (if present) partitions.  We will need to choose which tool to use based on file system; if UDF or ISO9660 present, use TeraCopy; otherwise use unhfs or tsk_recover
     secureCopy_list = ['udf', 'iso9660']
@@ -482,7 +501,7 @@ def carvefiles(tool, folders, outfolder, carve_ver, partition, item_barcode):
         else:
             carve_cmd = 'tsk_recover -a -o %s %s %s' % (partition, imagefile, outfolder)
         
-    print('\n\n\tTOOL: %s\n\n\tSOURCE: %s \n\tDESTINATION: %s\n' % (tool, imagefile, outfolder))
+    print('\n\tTOOL: %s\n\n\tSOURCE: %s \n\n\tDESTINATION: %s\n' % (tool, imagefile, outfolder))
     
     timestamp = str(datetime.datetime.now())  
     exitcode = subprocess.call(carve_cmd, shell=True)
@@ -507,7 +526,7 @@ def carvefiles(tool, folders, outfolder, carve_ver, partition, item_barcode):
     
     elif tool == 'unhfs' and os.path.exists(outfolder):
         file_count = sum([len(files) for r, d, files in os.walk(outfolder)])
-        print('\n\t%s files successfully transferred to %s.' % (file_count, outfolder))
+        print('\t%s files successfully transferred to %s.' % (file_count, outfolder))
         
     print('\n\tFile replication completed; proceed to content analysis.')
 
@@ -664,7 +683,7 @@ def normalize_dvd_content(folders, item_barcode, titlecount, drive_letter):
             print('\n\tChecking audio streams...')
             for t in titlelist:
                 cmd = "ffprobe -i %s -hide_banner -show_streams -select_streams a -loglevel error" % t
-                audio_check = subprocess.call(cmd, text=True)
+                audio_check = subprocess.check_output(cmd, shell=True, text=True)
                 audio_test[t] = audio_check
             
             #if there's no audio in any track, it's OK
@@ -769,12 +788,30 @@ def cdda_image_creation(folders, item_barcode, sourceDevice):
         timestamp = str(datetime.datetime.now())
         exitcode2 = subprocess.call(t2c_cmd, shell=True, text=True)
         
+        #toc2cue may try to encode path information as binary data--let's fix that
+        with open(cue, 'rb') as infile:
+            cue_info = infile.readlines()
+        
+        cue_info[0] = b'FILE "%s" BINARY\n' % cdr_bin
+        
+        with open(cue, 'wb') as outfile:
+            for line in cue_info:
+                outfile.write(line)           
+        
         premis_list.append(premis_dict(timestamp, 'metadata modification', exitcode2, t2c_cmd, "Converted the CD's table of contents (TOC) file to the CUE format.", t2c_ver))
         
         #place a copy of the .cue file for the first session in files_dir for the forthcoming WAV; this session will have audio data
         if x == 1:
-            shutil.copy(cue, os.path.join(files_dir, '%s.cue' % item_barcode))
-        
+            new_cue = os.path.join(files_dir, '%s.cue' % item_barcode)
+            
+            #update file information
+            cue_info[0] = b'FILE "%s.wav" WAVE\n' % item_barcode
+            
+            #now write the new cue file
+            with open(new_cue, 'wb') as outfile:
+                for line in cue_info:
+                    outfile.write(line)
+                
     #save PREMIS to file
     pickleDump('premis_list', premis_list, folders)
     
@@ -814,7 +851,7 @@ def cdda_wav_creation(folders, item_barcode, sourceDevice):
     
     print('\n\tAudio normalization complete; proceed to content analysis.')
 
-def TransferContent(unit_name, shipmentDate, item_barcode, transfer_vars):    
+def transferContent(unit_name, shipmentDate, item_barcode, transfer_vars):    
     #set variables
     folders = bdpl_folders(unit_name, shipmentDate, item_barcode)
     
@@ -878,6 +915,7 @@ def TransferContent(unit_name, shipmentDate, item_barcode, transfer_vars):
         
         #all other disk imaging will use ddrescue
         else:    
+
             ddrescue_image(folders, item_barcode, sourceDevice, other_device)
         
         #exit if disk image doesn't exist
@@ -948,18 +986,18 @@ def run_antivirus(folders, item_barcode):
     timestamp = str(datetime.datetime.now())
     exitcode = subprocess.call(av_command, shell=True, text=True)
     
-    #write info to appraisal_dict
-    appraisal_dict = pickleLoad('appraisal_dict', folders, item_barcode)
+    #write info to metadata_dict
+    metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
         
     with open(virus_log, 'r') as f:
         if "Infected files: 0" not in f.read():
-            appraisal_dict['Virus'] = 'WARNING! Virus or malware found; see %s.' % virus_log
+            metadata_dict['virus_scan_results'] = 'WARNING! Virus or malware found; see %s.' % virus_log
         
         else:
-            appraisal_dict['Virus'] = '-'
+            metadata_dict['virus_scan_results'] = '-'
 
         
-    pickleDump('appraisal_dict', appraisal_dict, folders)
+    pickleDump('metadata_dict', metadata_dict, folders)
     
     #save preservation to PREMIS
     premis_list = pickleLoad('premis_list', folders, item_barcode)
@@ -1242,7 +1280,7 @@ def write_html(header, path, file_delimiter, html, folders, item_barcode):
             
             pii_list = []
         
-            appraisal_dict = pickleLoad('appraisal_dict', folders, item_barcode)
+            metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
             
             #check that there are any PII results
             if os.stat(path).st_size > 0:
@@ -1289,15 +1327,15 @@ def write_html(header, path, file_delimiter, html, folders, item_barcode):
                 html.write('\n</table>')
                 
                 if len(pii_list) > 0:
-                    appraisal_dict['PII'] = '%s.' % ', '.join(pii_list)
+                    metadata_dict['pii_scan_results'] = '%s.' % ', '.join(pii_list)
                 else: 
-                    appraisal_dict['PII'] = '-'
+                    metadata_dict['pii_scan_results'] = '-'
         
             else:
                 html.write('\nNone found.')
-                appraisal_dict['PII'] = '-'
+                metadata_dict['pii_scan_results'] = '-'
             
-            pickleDump('appraisal_dict', appraisal_dict, folders)
+            pickleDump('metadata_dict', metadata_dict, folders)
 
         # otherwise write as normal
         else:
@@ -1452,18 +1490,39 @@ def get_stats(folders, cursor, html, item_barcode, re_analyze, jobType):
     #for dvd jobs, we need to use disk image metadata for dates...
     if jobType == 'DVD':
         file_stats = file_stats_di
-        
+    
+    #let's not accept file mtimes that were set when content was replicated.  Compare file time against timestamp for replication...
+    premis_list = pickleLoad('premis_list', folders, item_barcode)
+    try:
+        bdpl_time = [p for p in premis_list if p['eventType'] == 'replication'][0]['timestamp'].split('.')[0]
+    except IndexError:
+        bdpl_time = datetime.datetime.fromtimestamp(os.path.getmtime(os.path.join(temp_dir, 'folders_created.txt'))).isoformat().replace('T', ' ').split('.')[0]
+    
+    bdpl_time = datetime.datetime.strptime(bdpl_time, "%Y-%m-%d %H:%M:%S")
+    
     if len(file_stats) > 0:
         for dctnry in file_stats:
-            date_info.append(dctnry['mtime'])
+            dt_time = dctnry['mtime'].replace('T', ' ').split('.')[0]
+            dt_time = datetime.datetime.strptime(dt_time, "%Y-%m-%d %H:%M:%S")
+            if dt_time < bdpl_time:
+                date_info.append(dctnry['mtime'])
+            else:
+                date_info.append('undated')
         
         #remove all occurences of 'undated', to get better info
         date_info_check = [x for x in date_info if x != 'undated']
         
-        begin_date = min(date_info_check)[:4]
-        end_date = max(date_info_check)[:4]
-        earliest_date = min(date_info_check)
-        latest_date = max(date_info_check)   
+        if len(date_info_check) > 0:
+            begin_date = min(date_info_check)[:4]
+            end_date = max(date_info_check)[:4]
+            earliest_date = min(date_info_check)
+            latest_date = max(date_info_check)   
+        
+        else:
+            begin_date = "undated"
+            end_date = "undated"
+            earliest_date = "undated"
+            latest_date = "undated"
     
     else:
         begin_date = "undated"
@@ -1473,6 +1532,7 @@ def get_stats(folders, cursor, html, item_barcode, re_analyze, jobType):
         
     #generate a year count
     year_info = [x[:4] for x in date_info]
+    year_info = [x if x != 'unda' else 'undated' for x in year_info]
     
     year_count = dict(Counter(year_info))
     
@@ -1586,12 +1646,12 @@ def get_stats(folders, cursor, html, item_barcode, re_analyze, jobType):
     html.write('\n<h2 class="card-header">Detailed reports</h2>')
     html.write('\n<div class="card-body">')
     
-    #save information to appraisal_dict
-    appraisal_dict = pickleLoad('appraisal_dict', folders, item_barcode)
+    #save information to metadata_dict
+    metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
     
-    appraisal_dict.update({'Source': item_barcode, 'begin_date': begin_date, 'end_date' : end_date, 'Extent-normal': size, 'Extent-raw': size_bytes, 'Files': num_files, 'Duplicates': distinct_dupes, 'FormatCount': num_formats, 'Unidentified':unidentified_files})  
+    metadata_dict.update({'Source': item_barcode, 'begin_date': begin_date, 'end_date' : end_date, 'extent_normal': size, 'extent_raw': size_bytes, 'item_file_count': num_files, 'item_duplicate_count': distinct_dupes, 'FormatCount': num_formats, 'item_unidentified_count': unidentified_files})  
     
-    pickleDump('appraisal_dict', appraisal_dict, folders)
+    pickleDump('metadata_dict', metadata_dict, folders)
     
 def print_premis(premis_path, folders, item_barcode):   
     
@@ -2022,15 +2082,16 @@ def disk_image_info(folders, item_barcode):
         
         for mm in mmls_info:
             temp = {}
-            if [dt for dt in dt_info if 'file system' in dt and ', {} sectors from {})'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt]:
-                fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
-                temp['start'] = mm[0].split()[2]
-                temp['desc'] = fsname
-                temp['slot'] = mm[0].split()[1]
-                #now save this dictionary to our list of partition info
-                if not temp in partition_info_list:
-                    partition_info_list.append(temp)
-        
+            for dt in dt_info:
+                if 'file system' in dt and ', {} sectors from {})'.format(mm[0].split()[4].lstrip('0'), mm[0].split()[2].lstrip('0')) in dt:
+                    fsname = [d for d in dt.split('\n') if ' file system' in d][0].split(' file system')[0].lstrip().lower()
+                    temp['start'] = mm[0].split()[2]
+                    temp['desc'] = fsname
+                    temp['slot'] = mm[0].split()[1]
+                    #now save this dictionary to our list of partition info
+                    if not temp in partition_info_list:
+                        partition_info_list.append(temp)
+            
         pickleDump('partition_info_list', partition_info_list, folders)
                                 
     pickleDump('premis_list', premis_list, folders)
@@ -2119,8 +2180,8 @@ def stats_and_report_creation(folders, item_barcode, re_analyze, jobType):
 
     write_pronom_links(temp_html, new_html)
 
-    # get format list and add to appraisal dictionary
-    appraisal_dict = pickleLoad('appraisal_dict', folders, item_barcode)
+    # get format list and add to metadata dictionary
+    metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
     
     fileformats = []
     formatcount = 0
@@ -2135,14 +2196,14 @@ def stats_and_report_creation(folders, item_barcode, re_analyze, jobType):
                 fileformats.append(row[0])
             fileformats = [element or 'Unidentified' for element in fileformats] # replace empty elements with 'Unidentified'
             if formatcount > 0:
-                appraisal_dict['Formats'] = "Top file formats (out of %s total) are: %s" % (formatcount, ' | '.join(fileformats[:10]))
+                metadata_dict['format_overview'] = "Top file formats (out of %s total) are: %s" % (formatcount, ' | '.join(fileformats[:10]))
             else:
-                appraisal_dict['Formats'] = "-"
+                metadata_dict['format_overview'] = "-"
             
     except IOError:
-        appraisal_dict['Formats'] = "ERROR! No formats.csv file to pull formats from."
+        metadata_dict['format_overview'] = "ERROR! No formats.csv file to pull formats from."
             
-    pickleDump('appraisal_dict', appraisal_dict, folders)
+    pickleDump('metadata_dict', metadata_dict, folders)
 
 def analyzeContent(unit_name, shipmentDate, item_barcode, analysis_vars):
     
@@ -2259,7 +2320,8 @@ def analyzeContent(unit_name, shipmentDate, item_barcode, analysis_vars):
     print_premis(premis_path, folders, item_barcode)
     
     #write info to spreadsheet for collecting unit to review
-    writeSpreadsheet(folders, unit_name, shipmentDate, item_barcode, gui_vars, jobType, platform)
+    if not writeSpreadsheet(folders, unit_name, shipmentDate, item_barcode, gui_vars, jobType, platform):
+        return
        
     #create file to indicate that process was completed
     done_file = os.path.join(temp_dir, 'done.txt')
@@ -2278,7 +2340,7 @@ def analyzeContent(unit_name, shipmentDate, item_barcode, analysis_vars):
     except WindowsError:
         pass
     
-    '''       if using gui, print final details about item    '''
+    '''if using gui, print final details about item'''
     if analysis_vars['platform'] == 'bdpl_ingest':
         print('\n\n--------------------------------------------------------------------------------------------------\n\nINGEST PROCESS COMPLETED FOR ITEM %s\n\nResults:\n' % item_barcode)
         
@@ -2298,23 +2360,22 @@ def analyzeContent(unit_name, shipmentDate, item_barcode, analysis_vars):
                 else: 
                     print(term, line.split(':')[1].rstrip())
         print('\n\n')      
-    
-def writePremisToExcel(ws, newrow, eventType, premis_list):
 
-    temp_dict = [item for item in premis_list if item['eventType'] == eventType]
+def return_spreadsheet_row(ws, item_barcode):
+ 
+    newrow = ws.max_row+1
+    found = False
     
-    if temp_dict:
-        temp_dict = temp_dict[-1]    
-    else:
-        temp_dict = {'linkingAgentIDvalue' : '-', 'timestamp' : '-', 'eventOutcomeDetail' : 'Operation not completed.'}
-        
-    ws.cell(row=newrow, column=12, value = temp_dict['linkingAgentIDvalue'])
-    ws.cell(row=newrow, column=13, value = temp_dict['timestamp'])
-    if temp_dict['eventOutcomeDetail'] == '0' or temp_dict['eventOutcomeDetail'] == 0:
-        ws.cell(row=newrow, column=14, value = "Success")
-    else:
-        ws.cell(row=newrow, column=14, value = "Failure")
-
+    #if barcode exists in spreadsheet, set variable to that row
+    for cell in ws['A']:
+        if (cell.value is not None):
+            if item_barcode in str(cell.value):
+                newrow = cell.row
+                found = True
+                break
+    
+    return found, newrow
+    
 def writeNote(unit_name, shipmentDate, item_barcode, gui_vars):
 
     folders = bdpl_folders(unit_name, shipmentDate, item_barcode)
@@ -2324,83 +2385,40 @@ def writeNote(unit_name, shipmentDate, item_barcode, gui_vars):
     if not verify_data(unit_name, shipmentDate, item_barcode):
         return
     
-    spreadsheet = find_spreadsheet(folders, unit_name, shipmentDate)
-    if os.path.exists(spreadsheet):
-        wb = openpyxl.load_workbook(spreadsheet)
-    else:
-        return
+    metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
+    metadata_dict['label_transcription'] = gui_vars['label_transcription'].get(1.0, END).replace('LABEL TRANSCRIPTION:\n\n', '')
+    metadata_dict['technician_note'] = gui_vars['technician_note'].get(1.0, END)
     
-    #need to account for situations where we need to write a note after conclusion of analysis--in these cases, we don't want to create a temp file again...
-    if os.path.exists(temp_dir):
-        bc_dict = pickleLoad('bc_dict', folders, item_barcode)
-        bc_dict['label_transcript'] = gui_vars['label_transcription'].get(1.0, END).replace('LABEL TRANSCRIPTION:\n\n', '')
-    else:
-        bc_dict = {}
-        
-        ws1 = wb['Inventory']  
-        iterrows = ws1.iter_rows()
-        next(iterrows)
-
-        for row in iterrows:
-            if str(row[0].value) == '%s' % item_barcode:
-                bc_dict['current_barcode'] = row[0].value
-                bc_dict['current_accession'] = row[1].value
-                bc_dict['current_collection'] = row[2].value
-                bc_dict['current_coll_id'] = row[3].value
-                bc_dict['current_creator'] = row[4].value
-                bc_dict['phys_loc'] = row[5].value
-                bc_dict['current_source'] = row[6].value
-                bc_dict['label_transcript'] = gui_vars['label_transcription'].get(1.0, END).replace('LABEL TRANSCRIPTION:\n\n', '')
-                bc_dict['appraisal_notes'] = row[8].value
-                bc_dict['bdpl_notes'] = row[9].value
-                bc_dict['restriction_statement'] = row[10].value
-                bc_dict['restriction_end_date'] = row[11].value
-                bc_dict['initial_appraisal'] = row[12].value
-                break
-            else:
-                continue
-            
-        for val in bc_dict:
-            if bc_dict[val] is None:
-                bc_dict[val] = '-'
-            
-    ws = wb['Appraisal']
-
-    #check to make sure barcode hasn't already been written to worksheet; loop through
-    for cell in ws['A']:
-        if (cell.value is not None):
-            if item_barcode in str(cell.value):
-                newrow = cell.row
-                break
-            else:
-                newrow = ws.max_row+1
-        else:
-            newrow = ws.max_row+1
-
-    ws.cell(row=newrow, column=1, value = bc_dict['current_barcode'])
-    ws.cell(row=newrow, column=2, value = bc_dict['current_accession'])
-    ws.cell(row=newrow, column=3, value = bc_dict['current_collection'])
-    ws.cell(row=newrow, column=4, value = bc_dict['current_coll_id'])
-    ws.cell(row=newrow, column=5, value = bc_dict['current_creator'])
-    ws.cell(row=newrow, column=6, value = bc_dict['phys_loc'])
-    ws.cell(row=newrow, column=7, value = bc_dict['current_source'])
-    ws.cell(row=newrow, column=8, value = bc_dict['label_transcript'])
-    ws.cell(row=newrow, column=9, value = bc_dict['appraisal_notes'])
-    ws.cell(row=newrow, column=10, value = bc_dict['restriction_statement'])
-    ws.cell(row=newrow, column=11, value = bc_dict['restriction_end_date'])
-    
-    #write technician's note
-    ws.cell(row=newrow, column=15, value = gui_vars['noteField'].get(1.0, END))
-    
-    #if we've checked the 'Failed' checkbox, record failure in spreadsheet
+    #additional steps if we are noting failed transfer of item...
     if gui_vars['noteFail'].get() == True:
-        ws.cell(row=newrow, column=13, value = str(datetime.datetime.now()))
-        ws.cell(row=newrow, column=14, value = "Failure")
+        metadata_dict['migration_date'] = str(datetime.datetime.now())
+        metadata_dict['migration_outcome'] = "Failure"
         
-        #since we've failed, indicate that barcode is done
         done_file = os.path.join(temp_dir, 'done.txt')
         if not os.path.exists(done_file):
             open(done_file, 'a').close()
+    
+    #save our metadata, just in case...
+    pickleDump('metadata_dict', metadata_dict, folders)
+    
+    #get spreadsheet
+    spreadsheet = find_spreadsheet(folders, unit_name, shipmentDate)
+    if not os.path.exists(spreadsheet):
+        print('\nWARNING: unable to find spreadsheet.  Check shipment directory...')
+        return
+        
+    wb = openpyxl.load_workbook(spreadsheet)
+    app_ws = wb['Appraisal']
+
+    #use function to see if barcode is already recorded; if not, use next available row
+    status, current_row = return_spreadsheet_row(app_ws, item_barcode)
+    
+    #get all column #s
+    ws_cols = get_spreadsheet_columns(app_ws)
+    
+    for key in ws_cols.keys():
+        if key in metadata_dict:
+            app_ws.cell(row=current_row, column=ws_cols[key], value=metadata_dict[key])
 
     #save and close spreadsheet
     wb.save(spreadsheet)
@@ -2411,81 +2429,67 @@ def writeSpreadsheet(folders, unit_name, shipmentDate, item_barcode, gui_vars, j
 
     premis_list = pickleLoad('premis_list', folders, item_barcode)
             
-    bc_dict = pickleLoad('bc_dict', folders, item_barcode)
+    metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
     
+    #get additional metadata from PREMIS about transfer
+    if jobType in ['Disk_image', 'DVD', 'CDDA']:
+        try:
+            temp_dict = [f for f in premis_list if f['eventType'] == 'disk image creation'][-1]
+        except IndexError:
+            temp_dict = {'linkingAgentIDvalue' : '-', 'timestamp' : '-', 'eventOutcomeDetail' : 'Operation not completed.'}
+    elif jobType == 'Copy_only':
+        try:
+            temp_dict = [f for f in premis_list if f['eventType'] == 'replication'][-1]
+        except IndexError:
+            temp_dict = {'linkingAgentIDvalue' : '-', 'timestamp' : '-', 'eventOutcomeDetail' : 'Operation not completed.'}
+    
+    metadata_dict['jobType'] = jobType
+    metadata_dict['transfer_method'] = temp_dict['linkingAgentIDvalue']
+    metadata_dict['migration_date'] = temp_dict['timestamp']
+    
+    if temp_dict['eventOutcomeDetail'] == '0' or temp_dict['eventOutcomeDetail'] == 0:
+        metadata_dict['migration_outcome'] = 'Success'
+    else:
+        metadata_dict['migration_outcome'] = 'Failure'
+    
+    #if using the GUI ingest tool, update any notes provided by technician
+    if platform == 'bdpl_ingest':
+        metadata_dict['label_transcription'] = gui_vars['label_transcription'].get(1.0, END).replace('LABEL TRANSCRIPTION:\n\n', '')
+        metadata_dict['technician_note'] = gui_vars['technician_note'].get(1.0, END)
+    
+    #add linked information
+    metadata_dict['full_report'] = '=HYPERLINK("{}", "{}")'.format(".\\%s\\metadata\\reports\\report.html" % item_barcode, "View report")
+    metadata_dict['transfer_link'] = '=HYPERLINK("{}", "{}")'.format(".\\%s" % item_barcode, "View transfer folder")
+    
+    if metadata_dict['initial_appraisal'] == "No appraisal needed":
+        metadata_dict['initial_appraisal'] = "Transfer to SDA"
+    elif metadata_dict['initial_appraisal'] == '-':
+        del metadata_dict['initial_appraisal']
+        
+    #write back metadata, just in case...
+    pickleDump('metadata_dict', metadata_dict, folders)
+    
+    #get spreadsheet
     spreadsheet = find_spreadsheet(folders, unit_name, shipmentDate)
     if not os.path.exists(spreadsheet):
-        return
-    else:
-        wb = openpyxl.load_workbook(spreadsheet)
-        ws = wb['Appraisal']
+        return False
         
-        newrow = ws.max_row+1
+    wb = openpyxl.load_workbook(spreadsheet)
+    app_ws = wb['Appraisal']
         
-        #check to make sure barcode hasn't already been written to worksheet; loop through
-        for cell in ws['A']:
-            if item_barcode in str(cell.value):
-                newrow = cell.row
-                break
+    #use function to see if barcode is already recorded; if not, use next available row
+    status, current_row = return_spreadsheet_row(app_ws, item_barcode)
+    
+    ws_cols = get_spreadsheet_columns(app_ws)
+    
+    for key in ws_cols.keys():
+        if key in metadata_dict:
+            app_ws.cell(row=current_row, column=ws_cols[key], value=metadata_dict[key])
 
-        ws.cell(row=newrow, column=1, value = bc_dict['current_barcode'])
-        ws.cell(row=newrow, column=2, value = bc_dict['current_accession'])
-        ws.cell(row=newrow, column=3, value = bc_dict['current_collection'])
-        ws.cell(row=newrow, column=4, value = bc_dict['current_coll_id'])
-        ws.cell(row=newrow, column=5, value = bc_dict['current_creator'])
-        ws.cell(row=newrow, column=6, value = bc_dict['phys_loc'])
-        ws.cell(row=newrow, column=7, value = bc_dict['current_source'])
-        #allow BDPL tech to update label transcription and save to spreadsheet
-        if platform == 'bdpl_ingest':
-            val = gui_vars['label_transcription'].get(1.0, END).replace('LABEL TRANSCRIPTION:\n\n', '')
-        else:
-            val = bc_dict['label_transcript']
-        ws.cell(row=newrow, column=8, value = val)
-        ws.cell(row=newrow, column=9, value = bc_dict['appraisal_notes'])
-        ws.cell(row=newrow, column=10, value = bc_dict['restriction_statement'])
-        ws.cell(row=newrow, column=11, value = bc_dict['restriction_end_date'])
-        
-        #pull in other information about transfer: timestamp, method, outcome
-        temp_dict = {}
-        if [f['eventType'] for f in premis_list if f['eventType'] == 'disk image creation']:
-            writePremisToExcel(ws, newrow, 'disk image creation', premis_list)
-        else:
-            writePremisToExcel(ws, newrow, 'replication', premis_list)
-        
-        #write technician's note, if using GUI
-        if platform == 'bdpl_ingest':
-            ws.cell(row=newrow, column=15, value = gui_vars['noteField'].get(1.0, END))
-        
-        #write appraisal information from various procedures
-        appraisal_dict = pickleLoad('appraisal_dict', folders, item_barcode)
-        
-        ws.cell(row=newrow, column=16, value = appraisal_dict.get('Extent-normal', 0))
-        ws.cell(row=newrow, column=17, value = appraisal_dict['Extent-raw'])
-        ws.cell(row=newrow, column=18, value = appraisal_dict['Files'])
-        ws.cell(row=newrow, column=19, value = appraisal_dict['Duplicates'])
-        ws.cell(row=newrow, column=20, value = appraisal_dict['Unidentified'])
-        ws.cell(row=newrow, column=21, value = appraisal_dict['Formats'])
-        ws.cell(row=newrow, column=22, value = appraisal_dict['begin_date'])
-        ws.cell(row=newrow, column=23, value = appraisal_dict['end_date'])
-        if 'Virus' in appraisal_dict:
-            ws.cell(row=newrow, column=24, value =  appraisal_dict['Virus'])
-        if 'PII' in appraisal_dict:
-            ws.cell(row=newrow, column=25, value = appraisal_dict['PII'])
-            
-        ws.cell(row=newrow, column=26).value = '=HYPERLINK("{}", "{}")'.format(".\\%s\\metadata\\reports\\report.html" % item_barcode, "View report")
-        
-        ws.cell(row=newrow, column=27).value = '=HYPERLINK("{}", "{}")'.format(".\\%s" % item_barcode, "View transfer folder")
+    #save and close spreadsheet
+    wb.save(spreadsheet)   
 
-        if bc_dict['initial_appraisal'] == "No appraisal needed":
-            ws.cell(row=newrow, column=28, value = "Transfer to SDA")
-        
-        if jobType == 'DVD':
-            ws.cell(row=newrow, column=29).value = 'DVD: transfer "files" to MCO'
-        if jobType == 'CDDA':
-            ws.cell(row=newrow, column=29).value = 'CD-DA: transfer "files" to MCO'
-
-        #save and close spreadsheet
-        wb.save(spreadsheet)       
+    return True
         
 def cleanUp(cleanUp_vars):
     
@@ -2517,7 +2521,7 @@ def cleanUp(cleanUp_vars):
     for name, widget in cleanUp_vars['text_widgets'].items():
         widget.configure(state='normal')
         widget.delete('1.0', END)
-        if name == 'bdpl_notes':
+        if name == 'bdpl_instructions':
             widget.insert(INSERT, "TECHNICIAN NOTES:\n")
         elif name == 'appraisal_notes':
             widget.insert(INSERT, "APPRAISAL NOTES:\n")
@@ -2562,6 +2566,117 @@ def verify_data(unit_name, shipmentDate, item_barcode, check=None):
     #if we get through all the above, then we are good to go!
     return True
 
+def get_spreadsheet_columns(ws):
+
+    spreadsheet_columns = {}
+    
+    for cell in ws[1]:
+        if not cell.value is None:
+        
+            if 'identifier' in str(cell.value).lower():
+                spreadsheet_columns['item_barcode'] = cell.column
+                
+            elif 'accession' in cell.value.lower():
+                spreadsheet_columns['current_accession'] = cell.column
+                
+            elif 'collection title' in cell.value.lower():
+                spreadsheet_columns['collection_title'] = cell.column
+                
+            elif 'collection id' in cell.value.lower():
+                spreadsheet_columns['current_coll_id'] = cell.column
+                
+            elif 'creator' in cell.value.lower():
+                spreadsheet_columns['collection_creator'] = cell.column
+                
+            elif 'physical location' in cell.value.lower():
+                spreadsheet_columns['phys_loc'] = cell.column
+                
+            elif 'source type' in cell.value.lower():
+                spreadsheet_columns['content_source_type'] = cell.column
+                
+            elif cell.value.strip().lower() == 'title':
+                spreadsheet_columns['item_title'] = cell.column
+                
+            elif 'label transcription' in cell.value.lower():
+                spreadsheet_columns['label_transcription'] = cell.column
+                
+            elif cell.value.strip().lower() == 'description':
+                spreadsheet_columns['item_description'] = cell.column
+                
+            elif 'initial appraisal notes' in cell.value.lower():
+                spreadsheet_columns['appraisal_notes'] = cell.column
+                
+            elif 'content date range' in cell.value.lower():
+                spreadsheet_columns['assigned_dates'] = cell.column
+                
+            elif 'instructions' in cell.value.lower():
+                spreadsheet_columns['bdpl_instructions'] = cell.column
+                
+            elif 'restriction statement' in cell.value.lower():
+                spreadsheet_columns['restriction_statement'] = cell.column
+                
+            elif 'restriction end date' in cell.value.lower():
+                spreadsheet_columns['restriction_end_date'] = cell.column
+                
+            elif 'sda' in cell.value.lower():
+                spreadsheet_columns['initial_appraisal'] = cell.column
+                
+            elif 'transfer method' in cell.value.lower():
+                spreadsheet_columns['transfer_method'] = cell.column
+                
+            elif 'migration date' in cell.value.lower():
+                spreadsheet_columns['migration_date'] = cell.column
+                
+            elif 'migration notes' in cell.value.lower():
+                spreadsheet_columns['technician_note'] = cell.column
+                
+            elif 'migration outcome' in cell.value.lower():
+                spreadsheet_columns['migration_outcome'] = cell.column
+                
+            elif 'extent (normalized)' in cell.value.lower():
+                spreadsheet_columns['extent_normal'] = cell.column
+                
+            elif 'extent (raw)' in cell.value.lower():
+                spreadsheet_columns['extent_raw'] = cell.column
+                
+            elif 'no. of files' in cell.value.lower():
+                spreadsheet_columns['item_file_count'] = cell.column
+                
+            elif 'no. of duplicate files' in cell.value.lower():
+                spreadsheet_columns['item_duplicate_count'] = cell.column
+                
+            elif 'no. of unidentified files' in cell.value.lower():
+                spreadsheet_columns['item_unidentified_count'] = cell.column
+                
+            elif 'file formats' in cell.value.lower():
+                spreadsheet_columns['format_overview'] = cell.column
+                
+            elif 'begin date' in cell.value.lower():
+                spreadsheet_columns['begin_date'] = cell.column
+                
+            elif 'end date' in cell.value.lower():
+                spreadsheet_columns['end_date'] = cell.column
+                
+            elif 'virus status' in cell.value.lower():
+                spreadsheet_columns['virus_scan_results'] = cell.column
+                
+            elif 'pii status' in cell.value.lower():
+                spreadsheet_columns['pii_scan_results'] = cell.column
+                
+            elif 'full report' in cell.value.lower():
+                spreadsheet_columns['full_report'] = cell.column
+                
+            elif 'link to transfer' in cell.value.lower():
+                spreadsheet_columns['transfer_link'] = cell.column
+                
+            elif 'appraisal results' in cell.value.lower():
+                spreadsheet_columns['initial_appraisal'] = cell.column
+                
+            elif 'job type' in cell.value.lower():
+                spreadsheet_columns['jobType'] = cell.column
+    
+    return spreadsheet_columns    
+
 def load_metadata(folders, item_barcode, spreadsheet):
 
     ship_dir = folders['ship_dir']
@@ -2569,122 +2684,84 @@ def load_metadata(folders, item_barcode, spreadsheet):
     temp_dir = folders['temp_dir']
     
     wb = openpyxl.load_workbook(spreadsheet)
+    inv_ws = wb['Inventory']
+    app_ws = wb['Appraisal']
 
     #Find the barcode in the inventory sheet; save information to a dictionary so that it can be written to the Appraisal sheet later.
-    bc_dict = pickleLoad('bc_dict', folders, item_barcode)
+    metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
     
     #if dictionary is empty, read info from spreadsheet; otherwise, retain dictionary
-    if len(bc_dict) == 0:
-        try:
-            ws = wb['Inventory']  
-        except KeyError as e:
-            print('\nWARNING: ', e)
-            return False
-        iterrows = ws.iter_rows()
-        next(iterrows)
-    
-        for row in iterrows:
-            #look to match barcode with a value in the first column; then assign values in a dictionary
-            if str(row[0].value) == '%s' % item_barcode:
-                bc_dict['current_barcode'] = str(row[0].value)
-                bc_dict['current_accession'] = row[1].value
-                bc_dict['current_collection'] = row[2].value
-                bc_dict['current_coll_id'] = row[3].value
-                bc_dict['current_creator'] = row[4].value
-                bc_dict['phys_loc'] = row[5].value
-                bc_dict['current_source'] = row[6].value
-                bc_dict['label_transcript'] = row[7].value
-                bc_dict['appraisal_notes'] = row[8].value
-                bc_dict['bdpl_notes'] = row[9].value
-                bc_dict['restriction_statement'] = row[10].value
-                bc_dict['restriction_end_date'] = row[11].value
-                bc_dict['initial_appraisal'] = row[12].value
-                break
-            else:
-                continue
-                
-        #exit if barcode wasn't found
-        if len(bc_dict) == 0:
+    if len(metadata_dict) == 0:
+        
+        status, current_row = return_spreadsheet_row(inv_ws, item_barcode)
+        
+        #if search status was false, then barcode isn't listed in spreadsheet.  Report error!
+        if not status:
             print('\n\nError; barcode not found in spreadsheet.\n\nPlease review spreadsheet and correct barcode or add item to spreadsheet at %s.' % spreadsheet)
             return False
-        else:
-            #clean up any None values
-            for val in bc_dict:
-                if bc_dict[val] is None:
-                    bc_dict[val] = '-'
-       
-    
-    #Next, check if barcode has already been written to appraisal sheet
-    try:
-        ws1 = wb['Appraisal']
-    except KeyError as e:
-        print('\nWARNING: ', e)
-        return False    
         
-    iterrows = ws1.iter_rows()
-    next(iterrows)
+        ws_cols = get_spreadsheet_columns(inv_ws)
     
-    for row in iterrows:
-        if str(row[0].value) == '%s' % item_barcode:
- 
-            if not row[14].value is None:
-                bc_dict['noteField'] = str(row[14].value).rstrip()
+        for key in ws_cols.keys():
+            if key == 'item_barcode':
+                metadata_dict['item_barcode'] = item_barcode
             else:
-                bc_dict['noteField'] = '-'
-            
-            #If a 'done' file exists, we know the whole process was completed
-            done_file = os.path.join(temp_dir, 'done.txt')
-            if os.path.exists(done_file): 
-                print('\n\nNOTE: this item barcode has completed the entire ingest workflow.  Consult with the digital preservation librarian if you believe additional procedures are needed.')
-            #if no 'done' file, see where we are with the item...
-            else:
-                premis_list = pickleLoad('premis_list', folders, item_barcode)
-                if len(premis_list) == 0:
-                    print('\n\nItem barcode has been added to Appraisal worksheet, but no procedures have been completed.')
-                    break
-                else:
-                    print('\n\nItem barcode has been added to Appraisal worksheet; the following procedures have been completed:\n\t', '\n\t'.join(list(set((i['%s' % 'eventType'] for i in premis_list)))))
-                break
-        else: 
-            continue
+                metadata_dict[key] = inv_ws.cell(row=current_row, column=ws_cols[key]).value
+                
+        #clean up any None values
+        for val in metadata_dict:
+            if metadata_dict[val] is None:
+                metadata_dict[val] = '-'
+       
+    #Next, check if barcode has already been written to appraisal sheet
+    status, current_row = return_spreadsheet_row(app_ws, item_barcode)    
+    
+    #if barcode has been written to the appraisal sheet...
+    if status:
+        
+        #get our list of columns; if the 'note field' cell has content, add to the dictionary
+        ws_cols = get_spreadsheet_columns(app_ws)
+        
+        if not app_ws.cell(row=current_row, column=ws_cols['technician_note']).value is None:
+            metadata_dict['technician_note'] = app_ws.cell(row=current_row, column=ws_cols['technician_note']).value
            
-    pickleDump('bc_dict', bc_dict, folders)
+    pickleDump('metadata_dict', metadata_dict, folders)
 
     return True
 
 def metadata_to_gui(gui_vars, folders, item_barcode):
         
     #Find the barcode in the inventory sheet; save information to a dictionary so that it can be written to the Appraisal sheet later.
-    bc_dict = pickleLoad('bc_dict', folders, item_barcode)
+    metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
         
-    gui_vars['coll_title'].set(bc_dict['current_collection'])
-    gui_vars['coll_creator'].set(bc_dict['current_creator'])
-    gui_vars['xfer_source'].set(bc_dict['current_source'])
+    gui_vars['collection_title'].set(metadata_dict['collection_title'])
+    gui_vars['collection_creator'].set(metadata_dict['collection_creator'])
+    gui_vars['content_source_type'].set(metadata_dict['content_source_type'])
     
     gui_vars['label_transcription'].configure(state='normal')
     gui_vars['label_transcription'].delete('1.0', END)
-    gui_vars['label_transcription'].insert(INSERT, 'LABEL TRANSCRIPTION:\n\n%s' % bc_dict['label_transcript'])
+    gui_vars['label_transcription'].insert(INSERT, 'LABEL TRANSCRIPTION:\n\n%s' % metadata_dict['label_transcription'])
     
-    gui_vars['bdpl_notes'].configure(state='normal')
-    gui_vars['bdpl_notes'].delete('1.0', END)
-    gui_vars['bdpl_notes'].insert(INSERT, "TECHNICIAN NOTES:\n\n%s" % bc_dict['bdpl_notes'])
-    gui_vars['bdpl_notes'].configure(state='disabled')
+    gui_vars['bdpl_instructions'].configure(state='normal')
+    gui_vars['bdpl_instructions'].delete('1.0', END)
+    gui_vars['bdpl_instructions'].insert(INSERT, "TECHNICIAN NOTES:\n\n%s" % metadata_dict['bdpl_instructions'])
+    gui_vars['bdpl_instructions'].configure(state='disabled')
     
     gui_vars['appraisal_notes'].configure(state='normal')
     gui_vars['appraisal_notes'].delete('1.0', END)
-    gui_vars['appraisal_notes'].insert(INSERT, "APPRAISAL NOTES:\n\n%s" % bc_dict['appraisal_notes'])
+    gui_vars['appraisal_notes'].insert(INSERT, "APPRAISAL NOTES:\n\n%s" % metadata_dict['appraisal_notes'])
     gui_vars['appraisal_notes'].configure(state='disabled')
     
     try:
-        if bc_dict['noteField'] == '-':
+        if metadata_dict['technician_note'] == '-':
             notevalue = ''
         else:
-            notevalue = bc_dict['noteField']
+            notevalue = metadata_dict['technician_note']
     except KeyError:
         notevalue = ''
-    gui_vars['noteField'].configure(state='normal')
-    gui_vars['noteField'].delete('1.0', END)
-    gui_vars['noteField'].insert(INSERT, notevalue)
+    gui_vars['technician_note'].configure(state='normal')
+    gui_vars['technician_note'].delete('1.0', END)
+    gui_vars['technician_note'].insert(INSERT, notevalue)
     
 def check_unfinished(unit_name, shipmentDate):
     if not verify_data(unit_name, shipmentDate, '', 'check_unfinished'):
@@ -2727,31 +2804,30 @@ def check_progress(unit_name, shipmentDate):
         return
     
     try:
-        ws = wb['Appraisal']
+        app_ws = wb['Appraisal']
     except KeyError:
         print('\n\nConsult with Digital Preservation Librarian; "Appraisal" worksheet does not exist.')
         return
     
     try:
-        ws2 = wb['Inventory']
+        inv_ws = wb['Inventory']
     except KeyError:
         print('\n\nConsult with Digital Preservation Librarian; "Inventory" worksheet does not exist.')
         return    
     
     #get list of all barcodes on appraisal spreadsheet
-    app_list = []
-    for col in ws['A'][1:]:
+    app_barcodes = []
+    for col in app_ws['A'][1:]:
         if not col.value is None:
-            app_list.append(str(col.value))
+            app_barcodes.append(str(col.value))
     
     #get list of all barcodes on inventory spreadsheet
-    inv_bcs = {}
-    for col in ws2['A'][1:]:
+    inv_barcodes = {}
+    for col in inv_ws['A'][1:]:
         if not col.value is None:
-            inv_bcs[str(col.value)] = col.row
+            inv_barcodes[str(col.value)] = col.row
     
-    inv_list = list(inv_bcs.keys())
-            
+    inv_list = list(inv_barcodes.keys())        
     
     #check to see if there are any duplicate barcodes in the inventory; print warning if so
     duplicate_barcodes = [item for item, count in Counter(inv_list).items() if count > 1]
@@ -2759,20 +2835,20 @@ def check_progress(unit_name, shipmentDate):
     if duplicate_barcodes:
         print('\n\nWARNING! Inventory contains at least one duplicate barcode:')
         for dup in duplicate_barcodes:
-            print('\t%s\tRow: %s' % (dup, inv_bcs[dup]))
+            print('\t%s\tRow: %s' % (dup, inv_barcodes[dup]))
     
-    current_total = len(inv_list) - len(app_list)
+    current_total = len(inv_list) - len(app_barcodes)
     
-    items_not_done = list(set(inv_list) - set(app_list))
+    items_not_done = list(set(inv_list) - set(app_barcodes))
     
-    print('\n\nCurrent status: %s out of %s items have been ingested. \n\n%s remain.' % (len(app_list), len(inv_list), current_total))
+    print('\n\nCurrent status: %s out of %s items have been ingested. \n\n%s remain.' % (len(app_barcodes), len(inv_list), current_total))
     
     if len(items_not_done) > 0:
         print('\n\nThe following barcodes require ingest:\n%s' % '\n'.join(items_not_done))
     
     #reprint total if list is long...
     if len(items_not_done) > 15:    
-        print('\n\nCurrent status: %s out of %s items have been ingested. \n\n%s remain.' % (len(app_list), len(inv_list), current_total))
+        print('\n\nCurrent status: %s out of %s items have been ingested. \n\n%s remain.' % (len(app_barcodes), len(inv_list), current_total))
 
 
 def move_media_images(unit_name, shipmentDate):
@@ -2822,14 +2898,14 @@ def find_spreadsheet(folders, unit_name, shipmentDate):
     ship_dir = folders['ship_dir']
     
     #check to see if spreadsheet is present
-    spreadsheet = [x for x in os.listdir(ship_dir) if '%s_%s.xlsx' % (unit_name, shipmentDate) in x]
+    spreadsheet = [x for x in os.listdir(ship_dir) if x == '%s_%s.xlsx' % (unit_name, shipmentDate)]
     
     if len(spreadsheet) == 1: 
         workbook = os.path.join(ship_dir, spreadsheet[0])
         return workbook
     
     else:
-        print('\n\nWARNING: spreadsheet not located; check shipment directory and make sure it is named according to the convention [unit]_[shipment].xlsx (e.g., "UAC_20190805.xlsx").')
+        print('\n\nWARNING: spreadsheet not found; check shipment directory and make sure it is named according to the convention [unit]_[shipment].xlsx (e.g., "UAC_20190805.xlsx").')
         return 'ERROR'
 
 def updateCombobox(unit_name, unit_shipment_date):
@@ -2872,7 +2948,7 @@ def update_software():
 
 def main():
     
-    #global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, source5, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_notes, noteField, label_transcription, shipmentDateList, noteFail, re_analyze, other_device
+    #global window, source, jobType, unit, barcode, mediaStatus, source1, source2, source3, source4, source5, disk525, jobType1, jobType2, jobType3, jobType4, sourceDevice, barcodeEntry, sourceEntry, unitEntry, spreadsheet, coll_creator, coll_title, xfer_source, appraisal_notes, bdpl_instructions, noteField, label_transcription, shipmentDateList, noteFail, re_analyze, other_device
     
     update_software()
       
@@ -3030,7 +3106,7 @@ def main():
     createBtn = Button(lowerMiddle2, text="Load", bg='light slate gray', width = 8, command= lambda: first_run(unit.get(), unit_shipment_date.get(), barcode.get(), gui_vars))
     createBtn.grid(column=1, row=2, padx=20, pady=5)
 
-    transferBtn = Button(lowerMiddle2, text="Transfer", bg='light slate gray', width = 8, command= lambda: TransferContent(unit.get(), unit_shipment_date.get(), barcode.get(), transfer_vars))
+    transferBtn = Button(lowerMiddle2, text="Transfer", bg='light slate gray', width = 8, command= lambda: transferContent(unit.get(), unit_shipment_date.get(), barcode.get(), transfer_vars))
     transferBtn.grid(column=2, row=2, padx=20, pady=5)
 
     analyzeBtn = Button(lowerMiddle2, text="Analyze", bg='light slate gray', width = 8, command= lambda: analyzeContent(unit.get(), unit_shipment_date.get(), barcode.get(), analysis_vars))
@@ -3151,24 +3227,24 @@ def main():
     label_scroll.grid(row=1, column=1, pady=5, sticky='ns')
     #label_transcription.configure(state='disabled')
     
-    bdpl_notes = Text(inventoryBottom, height=4, width=70)
+    bdpl_instructions = Text(inventoryBottom, height=4, width=70)
     bdpl_scroll = Scrollbar(inventoryBottom)
-    bdpl_scroll.config(command=bdpl_notes.yview)
-    bdpl_notes.config(yscrollcommand=bdpl_scroll.set)
-    bdpl_notes.insert(INSERT, "TECHNICIAN NOTES:\n")
-    bdpl_notes.grid(row=2, column=0, pady=5, padx=(5,0))
+    bdpl_scroll.config(command=bdpl_instructions.yview)
+    bdpl_instructions.config(yscrollcommand=bdpl_scroll.set)
+    bdpl_instructions.insert(INSERT, "TECHNICIAN NOTES:\n")
+    bdpl_instructions.grid(row=2, column=0, pady=5, padx=(5,0))
     bdpl_scroll.grid(row=2, column=1, pady=5, sticky='ns')
-    bdpl_notes.configure(state='disabled')
+    bdpl_instructions.configure(state='disabled')
     
     '''Variables for main functions'''
      
-    gui_vars = {'coll_creator' : coll_creator, 'coll_title' : coll_title, 'xfer_source' : xfer_source, 'bdpl_notes' : bdpl_notes, 'appraisal_notes' : appraisal_notes, 'label_transcription': label_transcription, 'noteField': noteField, 'noteFail' : noteFail, 'platform' : 'bdpl_ingest'}
+    gui_vars = {'collection_creator' : coll_creator, 'collection_title' : coll_title, 'content_source_type' : xfer_source, 'bdpl_instructions' : bdpl_instructions, 'appraisal_notes' : appraisal_notes, 'label_transcription': label_transcription, 'technician_note': noteField, 'noteFail' : noteFail, 'platform' : 'bdpl_ingest'}
     
     transfer_vars = {'platform' : 'bdpl_ingest', 'jobType' : jobType, 'sourceDevice' : sourceDevice, 'source' : source, 'other_device' : other_device, 'disk525' : disk525, 'mediaStatus' : mediaStatus}
     
-    analysis_vars = {'platform' : 'bdpl_ingest', 'jobType' : jobType, 're_analyze' : re_analyze, 'gui_vars' : {'coll_creator' : coll_creator, 'coll_title' : coll_title, 'xfer_source' : xfer_source, 'bdpl_notes' : bdpl_notes, 'appraisal_notes' : appraisal_notes, 'label_transcription': label_transcription, 'noteField': noteField}}
+    analysis_vars = {'platform' : 'bdpl_ingest', 'jobType' : jobType, 're_analyze' : re_analyze, 'gui_vars' : {'collection_creator' : coll_creator, 'collection_title' : coll_title, 'content_source_type' : xfer_source, 'bdpl_instructions' : bdpl_instructions, 'appraisal_notes' : appraisal_notes, 'label_transcription': label_transcription, 'technician_note': noteField}}
     
-    cleanUp_vars = {'radio_buttons' : {'jobType1' : jobType1, 'jobType2': jobType2, 'jobType3': jobType3, 'jobType4' : jobType4, 'source1' : source1, 'source2' : source2, 'source3' : source3, 'source4' : source4, 'source5' : source5}, 'str_vars' : {'jobType' : jobType, 'sourceDevice' : sourceDevice, 'barcode' : barcode, 'source' : source, 'other_device' : other_device, 'disk525' : disk525, 'coll_creator' : coll_creator, 'coll_title' : coll_title, 'xfer_source' : xfer_source}, 'checkboxes' : {'mediaStatus' : mediaStatus, 'noteFail' : noteFail, 're_analyze' : re_analyze}, 'entry_widgets' : {'barcodeEntry' : barcodeEntry, 'sourceEntry' : sourceEntry}, 'text_widgets' : {'bdpl_notes' : bdpl_notes, 'appraisal_notes' : appraisal_notes, 'label_transcription': label_transcription, 'noteField': noteField}}
+    cleanUp_vars = {'radio_buttons' : {'jobType1' : jobType1, 'jobType2': jobType2, 'jobType3': jobType3, 'jobType4' : jobType4, 'source1' : source1, 'source2' : source2, 'source3' : source3, 'source4' : source4, 'source5' : source5}, 'str_vars' : {'jobType' : jobType, 'sourceDevice' : sourceDevice, 'barcode' : barcode, 'source' : source, 'other_device' : other_device, 'disk525' : disk525, 'collection_creator' : coll_creator, 'collection_title' : coll_title, 'content_source_type' : xfer_source}, 'checkboxes' : {'mediaStatus' : mediaStatus, 'noteFail' : noteFail, 're_analyze' : re_analyze}, 'entry_widgets' : {'barcodeEntry' : barcodeEntry, 'sourceEntry' : sourceEntry}, 'text_widgets' : {'bdpl_instructions' : bdpl_instructions, 'appraisal_notes' : appraisal_notes, 'label_transcription': label_transcription, 'technician_note': noteField}}
     
     window.mainloop()
 

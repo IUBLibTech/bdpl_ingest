@@ -10,50 +10,76 @@ def main():
         if os.path.exists(spreadsheet):
             break
     
-    wb = openpyxl.load_workbook(spreadsheet)
-    ws = wb['Inventory']
-    
     print('\nOptions:\n\t 1 - Validate BDPL spreadsheet submitted by unit\n\t 2 - Validate barcodes on RipStation "userdata.txt" file')
     
     while True:
         option = input('\nEnter your desired option (1 /2): ')
         if option.strip() == '1':
-            validate_spreadsheet(wb, ws, spreadsheet)
+            validate_spreadsheet(spreadsheet)
             break
         elif option.strip() == '2':
-            validate_userdata(wb, ws, spreadsheet)
+            validate_userdata(spreadsheet)
             break
         else:
             continue
 
-def validate_spreadsheet(wb, ws, spreadsheet):
-    print('\n\n\tNOTE: validating spreadsheet against template version 20190724; update script if new template is in use.')
+def validate_spreadsheet(spreadsheet):
+    print('\n\n\tNOTE: validating spreadsheet against template version 20191029; update script if new template is in use.')
+    
+    wb = openpyxl.load_workbook(spreadsheet)
+    ws = wb['Inventory']
+    ws_app = wb['Appraisal']
     
     '''make sure correct column headers are in use'''
     
     #current column headers--UPDATE IF NEEDED!
-    template_headers = ['Identifier', 'Accession ID (if known)', 'Collection Title (if assigned)', 'Collection ID (if assigned)', 'Creator (if known)', 'Physical location of media', 'Source type (select from drop down or type)', 'Label transcription', 'Initial appraisal notes (including potential sensitive data)', 'Instructions for BDPL staff ', 'Restriction Statement', 'Restriction end date (YYYY-MM-DD)', 'Move directly to SDA without appraisal? ']
+    inventory_headers = ['Identifier', 'Accession ID (if known)', 'Collection Title (if assigned)', 'Collection ID (if assigned)', 'Creator (if known)', 'Physical location of media', 'Source type (select from drop down or type)', 'Title', 'Label transcription', 'Description', 'Initial appraisal notes (including potential sensitive data)', 'Content date range (use YYYYMMDD format)', 'Instructions for BDPL staff', 'Restriction Statement', 'Restriction end date (YYYY-MM-DD)', 'Move directly to SDA without appraisal?']
+
     
-    new_headers = []
+    appraisal_headers = ['Identifier', 'Accession ID (if known)', 'Collection Title (if assigned)', 'Collection ID (if assigned)', 'Creator (if known)', 'Physical location of media', 'Source type', 'Label transcription', 'Title', 'Description', 'Initial appraisal notes', 'Restriction statement', 'Restriction end date (YYYY-MM-DD)', 'Transfer method', 'Job Type', 'Migration date', 'Migration outcome', 'Migration notes', 'Extent (normalized)', 'Extent (raw)', 'No. of files', 'No. of Duplicate Files', 'No. of Unidentified Files', 'File Formats', 'Begin Date', 'End Date', 'Virus Status', 'PII Status', 'Full report', 'Link to transfer', 'Appraisal results']
+    
+    current_inventory_headers = []
     for cell in ws[1]:
         if not cell.value is None:
-            new_headers.append(cell.value)
+            current_inventory_headers.append(cell.value)
     
-    column_list = 'ABCDEFGHIJKLMNOP'
+    column_list = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC', 'AD', 'AE']
     
-    #compare current headers vs. template
+    #check inventory headers: compare current vs. template
+    print('\n\nChecking "Inventory" worksheet...')
     errors = 0
-    for i in range(0, len(template_headers)):
+    for i in range(0, len(inventory_headers)):
         try:
-            if new_headers[i] != template_headers[i]:
-                print('\n\nWARNING: Column %s has incorrect header!\n\tHeader is "%s"; SHOULD be "%s"' % (column_list[i], new_headers[i], template_headers[i]))
+            if current_inventory_headers[i] != inventory_headers[i]:
+                print('\nWARNING: "Inventory" column %s has incorrect header!\n\tHeader is "%s"; SHOULD be "%s"' % (column_list[i], current_inventory_headers[i], inventory_headers[i]))
                 errors += 1
         except IndexError as e:
-            print('\n\nWARNING: %s not included.' % template_headers[i])
+            print('\n\nWARNING: %s not included on "Inventory" worksheet.' % inventory_headers[i])
             errors += 1
     
     if errors == 0:
-        print('\n\nNo errors with spreadsheet headers!')
+        print('\n\nNo errors with "Inventory" worksheet headers!')
+        
+    #check appraisal headers
+    current_appraisal_headers = []
+    for cell in ws_app[1]:
+        if not cell.value is None:
+            current_appraisal_headers.append(cell.value)
+    
+    #check appraisal headers: compare current vs. template
+    print('\nChecking "Appraisal" worksheet headers...')
+    errors = 0
+    for i in range(0, len(appraisal_headers)):
+        try:
+            if current_appraisal_headers[i] != appraisal_headers[i]:
+                print('\nWARNING: "Appraisal" column %s has incorrect header!\n\tHeader is "%s"; SHOULD be "%s"' % (column_list[i], current_appraisal_headers[i], appraisal_headers[i]))
+                errors += 1
+        except IndexError as e:
+            print('\n\nWARNING: %s not included on "Appraisal" worksheet.' % appraisal_headers[i])
+            errors += 1
+    
+    if errors == 0:
+        print('\n\nNo errors with "Appraisal" worksheet headers!')
     
     new_bcs = {}    
     missing_barcodes = []
@@ -120,7 +146,11 @@ def validate_spreadsheet(wb, ws, spreadsheet):
     except FileNotFoundError:
         print('\n\nUnable to access copy of master spreadsheet at ', master_copy)
 
-def validate_userdata(wb, ws, spreadsheet):
+def validate_userdata(spreadsheet):
+    
+    wb = openpyxl.load_workbook(spreadsheet)
+    ws = wb['Inventory']
+    
     while True:
         userdata = input('\nEnter Python-appropriate path to "userdata.txt": ')
     
