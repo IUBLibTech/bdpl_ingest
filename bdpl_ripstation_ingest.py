@@ -194,9 +194,10 @@ def main():
                         with open(rs_log, 'r') as inf:
                             for line in inf.read().splitlines():
                                 if album_number in line:
-                                    outf.write('%sT%s\n' % (rs_timestamp, line))
+                                    outf.write('%s %s\n' % (rs_timestamp, line))
                 
                 #get info about wav file
+                print('\nSTEP 1: FORMAT NORMALIZATION TO .BIN\n\n')
                 cmd = 'ffprobe -i %s -hide_banner -show_streams -select_streams a' % wav_file
                 audio_info = subprocess.check_output(cmd, shell=True, text=True).split('\n')
                 
@@ -210,7 +211,7 @@ def main():
                 channels = audio_dict['channels']
                 
                 #now create bin file with raw 16 bit little-endian PCM 
-                cmd = 'ffmpeg -i %s -hide_banner -ar %s -ac %s -f s16le -acodec pcm_s16le %s' % (wav_file, sample_rate, channels, cdr_bin)
+                cmd = 'ffmpeg -y -i %s -hide_banner -ar %s -ac %s -f s16le -acodec pcm_s16le %s' % (wav_file, sample_rate, channels, cdr_bin)
                 timestamp = str(datetime.datetime.now())
                 exitcode = subprocess.call(cmd, shell=True)
                 
@@ -289,7 +290,7 @@ def main():
                         with open(rs_log, 'r') as inf:
                             for line in inf.read().splitlines():
                                 if item_barcode in line:
-                                    outf.write('%sT%s\n' % (rs_timestamp, line))
+                                    outf.write('%s %s\n' % (rs_timestamp, line))
                 
                 #mount .ISO so we can verify disk image type
                 exitcode = mount_iso(orig_imagefile)
