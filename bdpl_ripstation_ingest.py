@@ -115,10 +115,10 @@ def main():
     if rip_option == 'DVD_Data':
         rs_log = os.path.join(ship_dir, 'Log.txt')
     else:
-        rs_log = os.path.join(ship_dir, 'log.txt')
+        rs_log = os.path.join(ship_dir, 'log_cdda.txt')
         
     if not os.path.exists(rs_log):
-        print('\nWARNING: Could not locate RipStation log in shipment folder.  Be sure file is present and correctly named (Log.txt) and then run script again.')
+        print('\nWARNING: Could not locate RipStation log in shipment folder.  Be sure file is present and correctly named (Log.txt or log_cdda.txt) and then run script again.')
         sys.exit(1)
         
     #set timestamp variable so we can get YYYY-MM-DD info (ripstation logs only include HH:MM:SS)
@@ -210,7 +210,7 @@ def main():
                 channels = audio_dict['channels']
                 
                 #now create bin file with raw 16 bit little-endian PCM 
-                cmd = 'ffmpeg -i %s -ar %s -ac %s -f s16le -acodec pcm_s16le %s' % (wav_file, sample_rate, channels, cdr_bin)
+                cmd = 'ffmpeg -i %s -hide_banner -ar %s -ac %s -f s16le -acodec pcm_s16le %s' % (wav_file, sample_rate, channels, cdr_bin)
                 timestamp = str(datetime.datetime.now())
                 exitcode = subprocess.call(cmd, shell=True)
                 
@@ -237,7 +237,7 @@ def main():
                     with open(wav_cue, 'r') as infile:
                         for line in infile.readlines():
                             if line.startswith('FILE'):
-                                outfile.write('FILE "%.bin" BINARY' % item_barcode)
+                                outfile.write('FILE "%s.bin" BINARY' % item_barcode)
                             elif line.startswith('  TRACK') or line.startswith('    INDEX'):
                                 outfile.write(line)
                 

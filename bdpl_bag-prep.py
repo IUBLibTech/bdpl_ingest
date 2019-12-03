@@ -12,23 +12,21 @@ import csv
 from lxml import etree
 import uuid
 
-from bdpl_ingest import md5
-from bdpl_ingest import return_spreadsheet_row
+from bdpl_ingest import *
+from bdpl_ripstation_ingest import *
 
 
-def list_write(list_name, barcode, message=None):
-    with open(list_name, 'a') as current_list:
-        if message is None:
-            current_list.write('%s\n' % barcode)
-        else:
-            current_list.write('%s\t%s\n' % (barcode, message))
+
+def write_list(list_name, message):
+    with open(list_name, 'a') as f:
+        f.write(message)
     
-def check_list(list_name, barcode):
+def check_list(list_name, item_barcode):
     if not os.path.exists(list_name):
         return False
     with open(list_name, 'r') as f:
         for item in f:
-            if barcode in item.strip():
+            if item_barcode in item.strip():
                 return True
             else:
                 continue
@@ -80,9 +78,9 @@ def raw_text(text):
             new_string+=char
     return new_string
 
-def separate_content(sep_dest, file, log, report_dir, barcode):
+def separate_content(sep_dest, file, log, bag_report_dir, item_barcode):
     #We will store results for this file in a temp file for the whole barcode.
-    separated_file_stats = os.path.join(report_dir, '%s-separation-stats.txt' % barcode)
+    separated_file_stats = os.path.join(bag_report_dir, '%s-separation-stats.txt' % item_barcode)
     temp_list = []
     
     #if this temp file exists, retrieve it and check if this file has already been moved.
@@ -142,16 +140,24 @@ def separate_content(sep_dest, file, log, report_dir, barcode):
         result = e
 
     #add file to our temp list, noting result of operation and file size.  Write temp list to file.
-    temp_list.append({'barcode' : barcode, 'file' : file, 'size' : size, 'result' : result, 'type' : type, 'puid' : puid})
+    temp_list.append({'barcode' : item_barcode, 'file' : file, 'size' : size, 'result' : result, 'type' : type, 'puid' : puid})
     
     with open(separated_file_stats, 'wb') as f:
         pickle.dump(temp_list, f)
-    
+
+def return_spreadsheet_value(ws, current_row, current_column):
+
+    return ws.cell(row=current_row, column=current_column).value
+
 def main():
     
     '''SET VARIABLES'''
     #Identify where files will be moved ###### UPDATE TO ARCHIVER location #######
-    destination = 'W:/Archiver_spool/general%2fmediaimages'
+    archiver_drop_off = 'W:/Archiver_spool/general%2fmediaimages'
+    
+    if not os.path.exists(archiver_drop_off):
+        print('WARNING: incorrect server shared mapped to W: drive.  Reconnect if necessary.')
+        sys.exit(1)
     
     #open master workbook and get ready to write
     master_spreadsheet = 'W:/spreadsheets/bdpl_master_spreadsheet.xlsx'
@@ -159,395 +165,366 @@ def main():
     item_ws = master_wb['Item']
     cumulative_ws = master_wb['Cumulative']
     
-    print('\nNOTE: destination is at %s and master spreadsheet is at %s' % (destination, master_spreadsheet))
+    print('\nNOTE: Archiver drop off location is at %s; master spreadsheet is at %s' % (archiver_drop_off, master_spreadsheet))
     
     #get unit name and shipment folder
     while True:
-
-        shipment = input('\nFull path to shipment folder: ')
-        shipment = shipment.replace('"', '').rstrip()
+        unit_name = input('\nEnter unit abbreviation: ')
         
-        if not os.path.exists(shipment):
-            print('Shipment folder not recognized; enclose in quotes and use "/".\n')
-            continue
+        shipmentDate = input('\nEnter shipment date: ')
         
-        packaging_info = os.path.join(shipment, 'packaging-info.txt')
-        if not os.path.exists(packaging_info):
-            #check on spreadsheet before we go any further; the following will help make sure that a hidden temp file doesn't foul things up
-            spreadsheets = list(set(glob.glob(os.path.join(shipment, '*.xlsx'))) - set(glob.glob(os.path.join(shipment, '~*.xlsx'))))
-            if len(spreadsheets) !=1:
-                print('\nWARNING: cannot identify shipment spreadsheet.  Please check directory to make sure .XLSX file is present.')
-                print(spreadsheets)
-                continue
-            else:
-                spreadsheet = spreadsheets[0]
-                
-            unit = input('\nUnit name: ')
-
-            sep_check = input('\nDoes shipment have any content to be separated/deaccessioned? (y/n) ')
-            
-            check = input('\nIs information entered correctly? (y/n) ')
-            
-            if check.lower().strip() == 'y':           
-                    
-                #make sure separations manifest is here
-                if sep_check.lower().strip() == 'y':
-                    manifest_check = glob.glob(os.path.join(shipment, 'separations.txt'))
-                    
-                    if len(manifest_check) != 1:
-                        print('\nWARNING: cannot identify separations manifest.  Please check directory to make sure separations.txt is present.')
-                        continue
-                    else:
-                        separations_manifest = manifest_check[0]
-                else:
-                    separations_manifest = ''
-                    
-                info = {'unit' : unit, 'spreadsheet' : spreadsheet, 'separations_manifest' : separations_manifest}
-                
-                with open(packaging_info, 'wb') as f:
-                    pickle.dump(info, f)
+        ship_dir = os.path.join('Z:\\', unit_name, 'ingest', shipmentDate)
+        
+        if os.path.exists(ship_dir):
+            break
         else:
-            info = {}
-            with open(packaging_info, 'rb') as f:
-                info = pickle.load(f)
+            print('\nWARNING: cannot locate folder %s.  Check unit name and shipment date.' % ship_dir)
+            continue
             
-            unit = info['unit'] 
-            spreadsheet = info['spreadsheet']
-            separations_manifest = info['separations_manifest']    
-            
-        break
+    packaging_info = os.path.join(ship_dir, 'packaging-info.txt')
+    
+    #if we've already worked on this shipment, check for info file; if found, assign variables.
+    if os.path.exists(packaging_info):
+        info = {}
+        with open(packaging_info, 'rb') as f:
+            info = pickle.load(f)
+        
+        unit_name = info['unit'] 
+        spreadsheet = info['spreadsheet']
+        separations_manifest = info['separations_manifest']
+    
+    else:
+        spreadsheet = os.path.join(ship_dir, '%s_%s.xlsx' % (unit_name, shipmentDate))
+        if not os.path.exists(spreadsheet):
+            print('\nWARNING: Could not locate %s in shipment folder.  Be sure spreadsheet is present and correctly named (%s_%s.xlsx) and then run script again.' % (spreadsheet, unit_name, shipmentDate))
+            sys.exit(1)
 
+        sep_check = input('\nDoes shipment have any content to be separated/deaccessioned? (y/n) ')
+                
+        if sep_check.lower().strip() == 'y':           
+                        
+            separations_manifest = os.path.join(ship_dir, 'separations.txt')
+                        
+            if not os.path.exists(separations_manifest):
+                print('\nWARNING: cannot identify separations manifest.  Please check directory to make sure separations.txt is present.')
+                sys.exit(1)
 
-    shipmentID = os.path.basename(shipment)
+        else:
+            separations_manifest = ''
+                    
+    
+        info = {'unit' : unit_name, 'spreadsheet' : spreadsheet, 'separations_manifest' : separations_manifest}
 
+        with open(packaging_info, 'wb') as f:
+            pickle.dump(info, f)
+        
     #set shipment directory as current working directory
-    os.chdir(shipment) 
+    os.chdir(ship_dir) 
      
     #open shipment workbook
     wb = openpyxl.load_workbook(spreadsheet)
-    ws = wb['Appraisal']
+    ws_app = wb['Appraisal']
     
-    #folders/files
-    report_dir = os.path.join(shipment, 'reports')
-    stats_doc = os.path.join(report_dir, 'shipment_stats.txt')
-    started_list = os.path.join(report_dir, 'started.txt') #to document all the barcodes that we started to package/process; all should be accounted for in the fail/complete lists
-    deaccession_list = os.path.join(report_dir, 'deaccession.txt')    #for barcodes/items that will not be sent to SDA
-    failed_list = os.path.join(report_dir, 'failed-packaging.txt') #for any failures; will note which stage the failure occurred 
-    bagged_list = os.path.join(report_dir, 'bagged.txt') #for barcodes that were successfully bagged
-    tarred_list = os.path.join(report_dir, 'tarred.txt') #for barcodes that were successfully tarred
-    cleaned_list = os.path.join(report_dir, 'cleaned.txt') #for barcode folders that were successfully cleaned and SIP creation completed
-    other_list = os.path.join(report_dir, 'other-decision.txt') #for barcode folders have an alternate appraisal decision
-    moved_list = os.path.join(report_dir, 'moved.txt') #for barcodes that reached the end of the process; should include any that were deaccessioned
-    metadata_list = os.path.join(report_dir, 'metadata.txt') #for barcodes that have metadata written to spreadsheet
-    separated_list = os.path.join(report_dir, 'separated-content.txt') #for barcodes that have undergone separations
-    unaccounted_list = os.path.join(report_dir, 'unaccounted.txt') #for barcodes that are in directory, but not in spreadsheet; need to check for data entry errors
-    format_report = os.path.join(report_dir, 'cumulative-formats.txt') # for tracking information on file formats
-    puid_report = os.path.join(report_dir, 'puid-report.txt') # list of all puids in shipment
-    duration_doc = os.path.join(report_dir, 'duration.txt')
-    missing_doc = os.path.join(report_dir, 'missing.txt')
-    
-    '''SET UP: VERIFY SPREADSHEET, GATHER INITIAL STATS, AND CHECK FOR INCONSISTENCIES WITH BARCODE FOLDERS IN SHIPMENT'''
-    #make sure column headings are correct; exit if they don't match targets
-    if ['Appraisal results', 'Source type', 'Label transcription', 'End Date'] != [ws['AB1'].value, ws['G1'].value, ws['H1'].value, ws['W1'].value]:
-        print('\n\nERROR: SPREADSHEET COLUMNS ARE NOT IN CORRECT ORDER')
-        print('Current headings:\n -AB1 (Appraisal results) = %s\n - G1 (Source type) = %s\n - H1 (Label transcription) = %s\n - I1 (Initial appraisal notes) = %s' % (ws['AB1'].value, ws['G1'].value, ws['H1'].value, ws['W1'].value))
-        sys.exit(1)
+    #folders/files for tracking status
+    bag_report_dir = os.path.join(ship_dir, 'bag_reports')
+    deaccession_dir = os.path.join(ship_dir, 'deaccessioned')
+    unaccounted_dir = os.path.join(ship_dir, 'unaccounted')
 
-    #we only want to run these steps the first time through...
-    if not os.path.exists(report_dir):
-        
-        #determine if directory includes folders not on spreadsheet and/or if spreadsheet has barcodes not in directory
-        spreadsheet_list = []
-        for col in ws['A']:
-            if col.value == 'Identifier':
-                continue
-            else:
-                spreadsheet_list.append(str(col.value))
-        
-        
-        #gte list of directories in our shipment folder
-        dir_list = next(os.walk(shipment))[1]
-        
-        #remove any of our working files from this list
-        for dir in ['review', 'reports', 'unaccounted', 'deaccessioned']:
-            try:
-                dir_list.remove(dir)
-            except ValueError:
-                pass
-        
-        #see if any barcode folders are missing
-        missing_from_dir = list(set(spreadsheet_list) - set(dir_list))
-        
-        #if we've already packaged content, remove any completed items from this 'missing' list
-        if os.path.exists(cleaned_list):
-            with open(cleaned_list, 'r') as f:
-                for dir in f.read().splitlines():
-                    if dir in missing_from_dir:
-                        missing_from_dir.remove(dir)
-        
-        
-        missing_from_spreadsheet = list(set(dir_list) - set(spreadsheet_list))
-        
-        #Get date info on items for shipment stats (acquired by using max/min of dir_list, using modified date as key)
-        latest_date = datetime.datetime.fromtimestamp(os.stat(max(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')
-        earliest_date = datetime.datetime.fromtimestamp(os.stat(min(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')        
-        
-        duration_stats = {}
-        if os.path.exists(duration_doc):
-            with open(duration_doc, 'wb') as file:
-                duration_stats = pickle.load(file)
-                
-            if earliest_date < duration_stats['earliest']:
-                duration_stats['earliest'] = earliest_date
-                
-            if latest_date > duration_stats['latest']:
-                duration_stats['latest'] = latest_date
-        
-        else:
-            duration_stats['earliest'] = earliest_date
-            duration_stats['latest'] = latest_date
+    started_list = os.path.join(bag_report_dir, 'started.txt') #to document all the barcodes that we started to package/process; all should be accounted for in the fail/complete lists
+    deaccession_list = os.path.join(bag_report_dir, 'deaccession.txt')    #for barcodes/items that will not be sent to SDA
+    other_list = os.path.join(bag_report_dir, 'other-decision.txt') #for barcode folders have an alternate appraisal decision     
+    failed_list = os.path.join(bag_report_dir, 'failed-packaging.txt') #for any failures; will note which stage the failure occurred 
 
-        
-        tdelta = datetime.datetime.strptime(duration_stats['latest'], '%Y%m%d') - datetime.datetime.strptime(duration_stats['earliest'], '%Y%m%d')
-        
-        #use 1 day as minimum timedelta
-        if tdelta < datetime.timedelta(days=1):
-            duration_stats['duration'] = 1
-        else:
-            duration_stats['duration'] = int(str(tdelta).split()[0])
+    prep_list = os.path.join(bag_report_dir, 'info_prepped.txt') #for barcodes that were successfully bagged
+    bagged_list = os.path.join(bag_report_dir, 'bagged.txt') #for barcodes that were successfully bagged
+    tarred_list = os.path.join(bag_report_dir, 'tarred.txt') #for barcodes that were successfully tarred
+    completed_list = os.path.join(bag_report_dir, 'completed.txt') #for barcode folders that were successfully cleaned and SIP creation completed
+
+    moved_list = os.path.join(bag_report_dir, 'moved.txt') #for barcodes that reached the end of the process; should include any that were deaccessioned
+    metadata_list = os.path.join(bag_report_dir, 'metadata.txt') #for barcodes that have metadata written to spreadsheet
+    separated_list = os.path.join(bag_report_dir, 'separated-content.txt') #for barcodes that have undergone separations
+    unaccounted_list = os.path.join(bag_report_dir, 'unaccounted.txt') #for barcodes that are in directory, but not in spreadsheet; need to check for data entry errors
+    format_report = os.path.join(bag_report_dir, 'cumulative-formats.txt') # for tracking information on file formats
+    puid_report = os.path.join(bag_report_dir, 'puid-report.txt') # list of all puids in shipment
+    duration_doc = os.path.join(bag_report_dir, 'duration.txt')
+    missing_doc = os.path.join(bag_report_dir, 'missing.txt')
+    stats_doc = os.path.join(bag_report_dir, 'shipment_stats.txt')    
+    '''SET UP: GATHER INITIAL STATS AND CHECK FOR INCONSISTENCIES WITH BARCODE FOLDERS IN SHIPMENT'''
+    #make our report directory
+    if not os.path.exists(bag_report_dir):
+        os.mkdir(bag_report_dir)
     
-        #make our report directory
-        if not os.path.exists(report_dir):
-            os.mkdir(report_dir)
+    #get list of directories in our shipment folder; make sure these are folders and do not include any folders created during bagging process
+    dir_list = [d for d in os.listdir(ship_dir) if os.path.isdir(os.path.join(ship_dir, d)) and not d in ['review', 'bag_reports', 'unaccounted', 'deaccessioned']]
+
+    #get list of barcodes from spreadsheet
+    spreadsheet_list = []
+    for col in ws_app['A'][1:]:
+        if not col.value is None:
+            spreadsheet_list.append(str(col.value))
+    
+    #see if any barcode folders are missing
+    missing_from_dir = list(set(spreadsheet_list) - set(dir_list))
+    
+    #don't include completed items in missing count    
+    if os.path.exists(completed_list):
+        for item in missing_from_dir:
+            if check_list(completed_list, item):
+                missing_from_dir.remove(item)  
+    
+    #check if there are any folders in the shipment NOT in spreadsheet
+    missing_from_spreadsheet = list(set(dir_list) - set(spreadsheet_list))
+    
+    #If we have unaccounted barcodes; save list to file and move the dirs themselves to an 'unaccounted' folder
+    if len(missing_from_spreadsheet) > 0:
         
-        #write duration and 'missing' stats to file
+        if not os.path.exists(unaccounted_dir):
+            os.mkdir(unaccounted_dir)   
+            
+        with open(unaccounted_list, 'a') as f:
+            for item in missing_from_spreadsheet:
+                f.write('%s\n' % item)
+                try:
+                    shutil.move(item, unaccounted_dir)
+                except (PermissionError, OSError) as e:
+                    write_list(failed_list, '%s\tmove_unaccounted\t%s' % (item_barcode, e))
+
+    #Get date info on items for shipment stats (acquired by using max/min of dir_list, using modified date as key)
+    latest_date = datetime.datetime.fromtimestamp(os.stat(max(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')
+    earliest_date = datetime.datetime.fromtimestamp(os.stat(min(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')        
+    
+    duration_stats = {}
+    if os.path.exists(duration_doc):
         with open(duration_doc, 'wb') as file:
-            pickle.dump(duration_stats, file)
-        with open(missing_doc, 'wb') as file:
-            pickle.dump((missing_from_dir, missing_from_spreadsheet), file)
+            duration_stats = pickle.load(file)
             
-        #If we have unaccounted barcodes; save list to file and move the dirs themselves to an 'unaccounted' folder
-        if len(missing_from_spreadsheet) > 0:
+        if earliest_date < duration_stats['earliest']:
+            duration_stats['earliest'] = earliest_date
             
-            if not os.path.exists('unaccounted'):
-                os.mkdir('unaccounted')   
-                
-            with open(unaccounted_list, 'a') as f:
-                for item in missing_from_spreadsheet:
-                    try:
-                        shutil.move(item, 'unaccounted')
-                        # cmd = 'mv -f %s "unaccounted"' % item
-                        # subprocess.call(cmd, shell=True)
-                        f.write('%s\n' % item)
-                    except (PermissionError, OSError) as e:
-                    #except subprocess.CalledProcessError as e:
-                        list_write(failed_list, barcode, 'move_unaccounted\t%s' % e)
-                    
+        if latest_date > duration_stats['latest']:
+            duration_stats['latest'] = latest_date
     
-    #if this is a subsequent run-through, get missing stats from file
     else:
-        with open(missing_doc, 'rb') as file:
-            missing_from_dir, missing_from_spreadsheet = pickle.load(file)
+        duration_stats['earliest'] = earliest_date
+        duration_stats['latest'] = latest_date
+
+    tdelta = datetime.datetime.strptime(duration_stats['latest'], '%Y%m%d') - datetime.datetime.strptime(duration_stats['earliest'], '%Y%m%d')
+    
+    #use 1 day as minimum timedelta
+    if tdelta < datetime.timedelta(days=1):
+        duration_stats['duration'] = 1
+    else:
+        duration_stats['duration'] = int(str(tdelta).split()[0])
+    
+    #write duration and 'missing' stats to file
+    with open(duration_doc, 'wb') as file:
+        pickle.dump(duration_stats, file)
+    with open(missing_doc, 'wb') as file:
+        pickle.dump(missing_from_dir), file)
 
     '''INITIATE PACKAGING'''
-    #loop through spreadsheet, skipping header row
-    iterrows = ws.iter_rows()
-    next(iterrows)
+    #get total number of rows, + 1
+    maxrow = ws_app.max_rows() + 1
     
-    for row in iterrows:
-
-        barcode = str(row[0].value)
+    #get all of our current spreadsheet columns
+    ws_columns = get_spreadsheet_columns(ws_app)
+    
+    #now loop through rows, skipping the headers...
+    for item in dir_list:
         
-        #skip to next barcode if current one does not have a folder in the shipment direcetory
-        if barcode in missing_from_dir:
+        item_barcode = item.strip()
+        
+        status, current_row = return_spreadsheet_row(ws_app, item_barcode)
+        
+        if not status:
+            print('\nUnable to locate barcode in spreadsheet! Moving on to next item...')
+            write_list(unaccounted_list, item_barcode)
+            try:
+                shutil.move(item_barcode, unaccounted_dir)
+            except (PermissionError, OSError) as e:
+                write_list(failed_list, '%s\tmove_unaccounted\t%s' % (item_barcode, e))
+            continue
+
+        #skip to next barcode if current one has already finished workflow
+        if check_list(completed_list, item_barcode):
+            print('\n%s completed.' % item_barcode)
             continue
         
         #document that we've started working on this barcode
-        if not check_list(started_list, barcode):
-            list_write(started_list, barcode)
+        if not check_list(started_list, item_barcode):
+            write_list(started_list, item_barcode)
+ 
+        print('\nWorking on item: %s' % item_barcode)    
         
-        #skip to next barcode if current one has already finished workflow
-        if check_list(cleaned_list, barcode):
-            print('\n%s completed.' % barcode)
-            continue
-            
-        print('\nWorking on item: %s' % barcode)    
+        initial_appraisal = return_spreadsheet_value(ws_app, current_row, ws_columns['initial_appraisal'])
         
         #if content will not be moved to SDA, just skip folder for now and write to skipped and moved lists
-        if str(row[27].value) == "Delete content":
-            if not check_list(deaccession_list, barcode):
-                
-                if not os.path.exists('deaccessioned'):
-                    os.mkdir('deaccessioned')
-                
-                try:
-                    shutil.move(barcode, "deaccessioned")
-                    # cmd = 'mv -f %s "deaccessioned"' % barcode
-                    # subprocess.call(cmd, shell=True)
-                    print('\n\tContent will not be transferred to SDA.  Continuing with next item.')
-                    list_write(deaccession_list, barcode)
-                except (PermissionError, OSError) as e:
-                #except subprocess.CalledProcessError as e:
-                    list_write(failed_list, barcode, 'deaccession\t%s' % e)
-                    
-                continue
-            
+        if initial_appraisal == "Delete content":
+            if check_list(deaccession_list, item_barcode):
+                print('\n\t%s has been moved to the "deaccession" folder.' % item_barcode)
             else:
-                print('\n\t%s has been moved to the "deaccession" folder.' % barcode)
+                if not os.path.exists(deaccession_dir):
+                    os.mkdir(deaccession_dir)
+                try:
+                    shutil.move(item_barcode, deaccession_dir)
+                    print('\n\tContent will not be transferred to SDA.  Continuing with next item.')
+                    write_list(deaccession_list, item_barcode)
+                
+                except (PermissionError, OSError) as e:
+                    write_list(failed_list, '%s\tdeaccession\t%s' % (item_barcode, e))
+                    
+            continue
         
         #if content has been determined to be of value, complete prep workflow.
-        elif str(row[27].value) == "Transfer to SDA":
+        elif initial_appraisal == "Transfer to SDA":
+
+            '''CHECK THAT FOLDER EXISTS'''            
+            folders = bdpl_folders(unit_name, shipmentDate, item_barcode)
             
-            '''CHECK THAT FOLDER EXISTS'''
-            #get full path to barcode folder.
-            target = os.path.join(shipment, barcode)
+            destination = folders['destination']
+            files_dir = folders['files_dir']
+            log_dir = folders['log_dir']
+            imagefile = folders['imagefile']
+            temp_dir = folders['temp_dir']
+            reports_dir = folders['reports_dir']
+            files_dir = folders['files_dir']
+            image_dir = folders['image_dir']
+            metadata = folders['metadata']
             
-            #make sure folder exists; note failure if missing
-            if not os.path.exists(target):
-                print('\n\tBarcode folder does not exist!')
-                list_write(failed_list, barcode, 'check_folder\tFOLDER DOES NOT EXIST')
-                continue
-            
-            #make sure that target contains content; first, check the appraisal spreadsheet 
-            if not check_list(bagged_list, barcode):
-                try:
-                    if row[17].value == 0:
-                        if os.path.exists(os.path.join(target, 'disk-image')) and len(os.listdir(os.path.join(target, 'disk-image'))) == 0: 
-                            list_write(failed_list, barcode, 'check_folder\tNO CONTENT IN BARCODE FOLDER: CHANGE APPRAISAL DECISION?')
-                            continue
-                except TypeError:
-                    if get_size(os.path.join(target, 'files')) == 0:
-                        if os.path.exists(os.path.join(target, 'disk-image')) and len(os.listdir(os.path.join(target, 'disk-image'))) == 0: 
-                            list_write(failed_list, barcode, 'check_folder\tNO CONTENT IN BARCODE FOLDER: CHANGE APPRAISAL DECISION?')
-                            continue
-            
-            #get file format info to include with master spreadsheet.  See if we've already saved a tally of this
-            format_list = []
-            if os.path.exists(format_report):
-                with open(format_report, 'rb') as f:
-                    format_list = pickle.load(f)
-            
-            puid_list = []                    
-            if os.path.exists(puid_report):
-                with open(puid_report, 'rb') as f:
-                    puid_list = pickle.load(f)
-            
-            #Copy format information
-            format_csv = os.path.join(target, 'metadata', 'reports', 'formatVersions.csv')
-            if os.path.exists(format_csv):
-                temp_list = []
-                with open(format_csv, 'r') as fi:
-                    fi = csv.reader(fi)
-                    #skip header row
-                    next(fi)
-                    #loop through format csv; create a dictionary for each row 
-                    for line in fi:
-                        temp_dict = {}
-                        temp_dict['puid'] = line[1]
-                        temp_dict['format'] = line[0]
-                        temp_dict['version'] = line[2]
-                        temp_dict['count'] = int(line[3])
-                        
-                        #add temp dict to a temp list
-                        temp_list.append(temp_dict)
-                        
-                        #add puids to a master list
-                        puid_list.append(line[1])
+            #complete initial preparations; skip if we're returning to item
+            if not check_list(prep_list, item_barcode):
                 
-                #first time through, just append our barcode format dictionary
-                if len(format_list) == 0:
-                    format_list.append({ barcode : temp_list})
+                file_count = return_spreadsheet_value(ws_app, current_row, ws_columns['item_file_count'])
                 
-                #otherwise, make sure barcode hasn't already been included.
-                else:
-                    if not barcode in [list(c)[0] for c in format_list]:
-                        format_list.append({ barcode :temp_list})
+                #doublecheck if no file information has been reported on spreadsheet
+                if file_count is None or file_count == 0:
+                    #check for content in our image_dir and files_dir; if both are empty, fail barcode.
+                    if not checkFiles(image_dir) and not checkFiles(files_dir):
+                        write_list(failed_list, '%s\tcheck_folder\tNO CONTENT IN BARCODE FOLDER: CHANGE APPRAISAL DECISION?' % item_barcode)
+                            continue
+            
+                #get file format info to include with master spreadsheet.  If format and puid lists exist, load and then loop through format report...
+                format_list = []
+                if os.path.exists(format_report):
+                    with open(format_report, 'rb') as f:
+                        format_list = pickle.load(f)
+                        
+                puid_list = []                    
+                if os.path.exists(puid_report):
+                    with open(puid_report, 'rb') as f:
+                        puid_list = pickle.load(f)
+                            
+                #get file format/puid information for cumulative stats
+                format_csv = os.path.join(report_dir, 'formatVersions.csv')
+                if os.path.exists(format_csv):
+                    temp_list = []
+                    with open(format_csv, 'r') as fi:
+                        fi = csv.reader(fi)
+                        #skip header row
+                        next(fi)
+                        #loop through format csv; create a dictionary for each row 
+                        for line in fi:
+                            temp_dict = {}
+                            temp_dict['puid'] = line[1]
+                            temp_dict['format'] = line[0]
+                            temp_dict['version'] = line[2]
+                            temp_dict['count'] = int(line[3])
+                            
+                            #add temp dict to a temp list
+                            temp_list.append(temp_dict)
+                            
+                            #add puids to a master list
+                            puid_list.append(line[1])
                     
-                #and now write this back to file in case program closes.
+                        format_list.append({item_barcode : temp_list})
+                    
+                #and now write this back to file.
                 with open(format_report, 'wb') as f:
                     pickle.dump(format_list, f)
-                
                 with open(puid_report, 'wb') as f:
                     pickle.dump(puid_list, f)
+                
+                #confirm prep has completed
+                write_list(prep_list, item_barcode)
             
             '''REMOVE SEPARATED CONTENT AND TEMP FILES/FOLDERS'''
-            if not check_list(separated_list, barcode):
+            if not check_list(separated_list, item_barcode):
                 print('\n\tSeparating unnecessary files...\n')
                 
                 #remove bulk_extractor folder, if present, as well as reports used solely for appraisal/review
                 for dir in ['bulk_extractor', 'temp']:
-                    remove_dir = os.path.join(target, dir)
+                    remove_dir = os.path.join(destination, dir)
                     if os.path.exists(remove_dir):
                         shutil.rmtree(remove_dir)
              
                 for f in ["duplicates.csv", "errors.csv", "formats.csv", "formatVersions.csv", "mimetypes.csv", "unidentified.csv", "uniqueyears.csv", "years.csv", 'email_domain_histogram.txt', 'find_histogram.txt', 'telephone_histogram.txt', 'report.html']:
-                    report = os.path.join(target, 'metadata', 'reports', f)
+                    report = os.path.join(report_dir, f)
                     if os.path.exists(report):
                         os.remove(report)
                         
-                assets = os.path.join(target, 'metadata', 'reports', 'assets')
+                assets = os.path.join(report_dir, 'assets')
                 if os.path.exists(assets):
                     shutil.rmtree(assets)
                         
                 #remove any files that need to be separated
                 if os.path.isfile(separations_manifest):
                     #set up a log file
-                    separations_log = os.path.join(target, 'metadata', 'logs', 'separations.txt')
+                    separations_log = os.path.join(log_dir, 'separations.txt')
                     
                     #get a list of relevant lines from the separations manifest, splitting at the barcode (to avoid any differences with absolute paths)
                     to_be_separated = []
                     with open(separations_manifest, 'r') as f:
                         sep_list = f.read().splitlines()
                     for file in sep_list:
-                        if barcode in file:
+                        if item_barcode in file:
                             name = raw_text(file.replace('"', '').rstrip())
-                            to_be_separated.append(name.split('%s\\' % shipmentID, 1)[1])
+                            to_be_separated.append(name.split('%s\\' % shipmentDate, 1)[1])
                     
                     #if we've found any files, loop through list
                     if len(to_be_separated) > 0:
                         
-                        for item in to_be_separated:
+                        for sep_item in to_be_separated:
                             wildcard_list = []
                             
                             #if a wildcard is used, we will use glob to build a list of all files/folders matching pattern
-                            if '*' in item:
+                            if '*' in sep_item:
                                 
                                 #recursive option
-                                if '\\**' in item:
-                                    wildcard_list = glob.glob(item, recursive=True)
+                                if '\\**' in sep_item:
+                                    wildcard_list = glob.glob(sep_item, recursive=True)
                             
                                 #wildcard at one level
-                                elif '\\*' in item:
-                                    wildcard_list = glob.glob(item)
+                                elif '\\*' in sep_item:
+                                    wildcard_list = glob.glob(sep_item)
                                 
                                 #now loop through this list of files/folders identified by glob
                                 for wc in wildcard_list:
                                     sep_dest = os.path.join('deaccessioned', wc)
-                                    separate_content(sep_dest, wc, separations_log, report_dir, barcode)
+                                    separate_content(sep_dest, wc, separations_log, bag_report_dir, item_barcode)
                             
-                            elif os.path.isdir(item):
+                            elif os.path.isdir(sep_item):
                                 #build recursive list of all files in the folder
-                                for root, dirs, files in os.walk(item):
+                                for root, dirs, files in os.walk(sep_item):
                                     for f in files:
                                         wildcard_list.append(os.path.join(root, f))
                                 #loop through the list
                                 for wc in wildcard_list:
                                     sep_dest = os.path.join('deaccessioned', wc)
-                                    separate_content(sep_dest, wc, separations_log, report_dir, barcode)   
+                                    separate_content(sep_dest, wc, separations_log, bag_report_dir, item_barcode)   
 
                                 #now remove the folder
-                                cmd = 'RD /S /Q "%s"' % item
+                                cmd = 'RD /S /Q "%s"' % sep_item
                                 try:
                                     subprocess.call(cmd, shell=True)
                                 except subprocess.CalledProcessError as e:
                                     pass
                                              
-                            elif os.path.isfile(item):
-                                sep_dest = os.path.join('deaccessioned', item)
-                                separate_content(sep_dest, item, separations_log, report_dir, barcode)                        
+                            elif os.path.isfile(sep_item):
+                                sep_dest = os.path.join('deaccessioned', sep_item)
+                                separate_content(sep_dest, sep_item, separations_log, bag_report_dir, item_barcode)                        
                 
                         #compile stats and check to see if any errors reported
-                        separated_file_stats = os.path.join(report_dir, '%s-separation-stats.txt' % barcode)
+                        separated_file_stats = os.path.join(bag_report_dir, '%s-separation-stats.txt' % item_barcode)
                         file_stat_list = []
                         if os.path.exists(separated_file_stats):
                             with open(separated_file_stats, 'rb') as f:
@@ -574,30 +551,30 @@ def main():
                                         
                                         #remove disk-image folder if no longer needed
                                         try:
-                                            os.rmdir(os.path.join(target, 'disk-image'))
+                                            os.rmdir(image_dir)
                                         except OSError:
                                             pass
                             
                             #if we have any failures, this barcode will fail: we need to make sure any files designated for separation have been removed.        
                             if not success:
                                 print('\n\tNOTE: one or more errors with separations.')
-                                list_write(failed_list, barcode, 'Separations\tSee %s for details.' % separated_file_stats)
+                                write_list(failed_list, '%s\tSeparations\tSee %s for details.' % (item_barcode, separated_file_stats))
                                 continue
                             else:
                                 print('\n\tSeparations completed: %s files separated (%s bytes)' % (sep_files, sep_size))
-                                list_write(separated_list, barcode, '%s\t%s\t%s' % (str(sep_files), str(sep_size), str(di_sep)))
+                                write_list(separated_list, '%s\t%s\t%s\t%s' % (item_barcode, str(sep_files), str(sep_size), str(di_sep)))
                                 
                                 #get a count for each puid in our temp list; add to dictionary
                                 sep_puid_count = {puid:temp_puid.count(puid) for puid in temp_puid}
                                 
-                                separated_puids = os.path.join(report_dir, '%s_separated_puids.txt' % barcode)
+                                separated_puids = os.path.join(bag_report_dir, '%s_separated_puids.txt' % item_barcode)
                                 with open(separated_puids, 'wb') as f:
                                     pickle.dump(sep_puid_count, f)
                                 
                                 #os.remove(separated_file_stats)
                                 
                                 #add information on preservation event to PREMIS metadata with lxml
-                                premis = os.path.join(target, 'metadata', '%s-premis.xml' % barcode)
+                                premis = os.path.join(metadata, '%s-premis.xml' % item_barcode)
                                 PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
                                 PREMIS = "{%s}" % PREMIS_NAMESPACE
                                 NSMAP = {'premis' : PREMIS_NAMESPACE, "xsi": "http://www.w3.org/2001/XMLSchema-instance"}
@@ -655,7 +632,7 @@ def main():
                                 linkingObjectIDtype = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierType')
                                 linkingObjectIDtype.text = 'local'
                                 linkingObjectIDvalue = etree.SubElement(linkingObjectID, PREMIS + 'linkingObjectIdentifierValue')
-                                linkingObjectIDvalue.text = barcode
+                                linkingObjectIDvalue.text = item_barcode
                                 
                                 #add new event to root etree.Element; write to etree.ElementTree
                                 root.append(event)
@@ -667,41 +644,43 @@ def main():
                                 
                     else:
                         print('\tSeparations completed.')
-                        list_write(separated_list, barcode, '0\t0\t0') #include 0s for # of files separated, associated bytes, disk image
+                        write_list(separated_list, '%s\t0\t0\t0' % item_barcode) #include 0s for # of files separated, associated bytes, disk image
                         
             '''BAG FOLDER'''
             #make sure we haven't already bagged folder
-            if not check_list(bagged_list, barcode):
+            if not check_list(bagged_list, item_barcode):
             
                 print('\n\tCreating bag for barcode folder...')
                 
-                if str(row[21].value) == str(row[22].value):
-                    dates = str(row[21].value)
-                else:
-                    dates = '%s-%s' % (str(row[21].value), str(row[22].value))
+                begin_date = return_spreadsheet_value(ws_app, current_row, ws_columns['begin_date'])
+                end_date = return_spreadsheet_value(ws_app, current_row, ws_columns['end_date'])
+                content_source_type = return_spreadsheet_value(ws_app, current_row, ws_columns['content_source_type'])
+                label_transcription = return_spreadsheet_value(ws_app, current_row, ws_columns['label_transcription'])
+                try:
+                    item_title = return_spreadsheet_value(ws_app, current_row, ws_columns['item_title'])
+                except KeyError:
+                    item_title = ''
+                appraisal_notes = return_spreadsheet_value(ws_app, current_row, ws_columns['appraisal_notes'])
+                
+                dates = '%s-%s' % (begin_date, end_date)
+
                 
                 #description for bag-info.txt currently includes source media, label transcription, and appraisal note.
-                desc = 'Source: %s | Label/Title: %s. | Appraisal notes: %s. | Date range: %s' %(str(row[6].value), str(row[7].value), str(row[8].value), dates)
+                desc = 'Source: %s. | Label: %s. | Title: %s. | Appraisal notes: %s. | Date range: %s' %(content_source_type, label_transcription, item_title, appraisal_notes, dates)
                 desc = desc.replace('\n', ' ')    
         
                 try:
-                    bagit.make_bag(target, {"Source-Organization" : unit, "External-Description" : desc, "External-Identifier" : barcode}, checksums=["md5"])
-                    list_write(bagged_list, barcode)
+                    bagit.make_bag(destination, {"Source-Organization" : unit_name, "External-Description" : desc, "External-Identifier" : item_barcode}, checksums=["md5"])
+                    write_list(bagged_list, item_barcode)
                     print('\tBagging complete.')
                 except (RuntimeError, PermissionError, bagit.BagError, OSError) as e:
                     print("\tUnexpected error: ", e)
-                    list_write(failed_list, barcode, 'bagit\t%s' % e)
-                    
-                    #write info so we can use it later
-                    info = {'unit' : unit, 'description' : desc}
-                    with open(os.path.join(report_dir, '%s-bag-info.txt' % barcode), 'wb') as fi:
-                        pickle.dump(info, fi)
-                    
+                    write_list(failed_list, '%s\tbagit\t%s' % (item_barcode, e)
                     continue
             
             '''CREATE TAR'''
             #make sure file hasn't already been tarred
-            if not check_list(tarred_list, barcode):
+            if not check_list(tarred_list, item_barcode):
                 
                 #Make sure we have enough space to create tar file (just to be sure; we should check first, as a rule)
                 print('\n\tChecking available space...')
@@ -709,8 +688,8 @@ def main():
                 #first check available space
                 (total, used, free) = shutil.disk_usage(os.getcwd())
                 
-                #now get size of target
-                cmd = 'du -s %s' % target
+                #now get size of destination
+                cmd = 'du -s %s' % destination
                 dir_size = int(subprocess.check_output(cmd, shell=True, text=True).split()[0])
                 
                 #check if the new archive will have sufficient space on disk; include addition 10240 bytes for tar file. Ff so, continue.  If not, exit with a warning
@@ -718,37 +697,37 @@ def main():
                 
                 if available_space <= 0:
                     print('\n\tWARNING! Insufficient space to create tar archive.\n\t\tAvailable space: %s\n\t\tSize needed for archive: %s' % (free, string(dir_size)))
-                    list_write(failed_list, barcode, 'Insufficient space to create tar archive; Need minium of %s bytes' % (free, string(dir_size)))
+                    write_list(failed_list, '%s\tInsufficient space to create tar archive; need minimum of %s bytes' % (item_barcode, string(dir_size)))
                     continue
                 else:
                     print('\tCheck complete; sufficient space for tar file.')
                 
                 #tar folder
                 print('\n\tCreating tar archive...')
-                if 'POL' in barcode:
-                    tar_file = '%s.tar.gz' % os.path.basename(target)
-                    cmd = 'tar -czf %s %s' % (tar_file, os.path.basename(target))
+                if 'POL' in item_barcode:
+                    tar_file = '%s.tar.gz' % os.path.basename(destination)
+                    cmd = 'tar -czf %s %s' % (tar_file, os.path.basename(destination))
                 else:
-                    tar_file = '%s.tar' % os.path.basename(target)
-                    cmd = 'tar -cf %s %s' % (tar_file, os.path.basename(target))
+                    tar_file = '%s.tar' % os.path.basename(destination)
+                    cmd = 'tar -cf %s %s' % (tar_file, os.path.basename(destination))
                 
                 try:
                     subprocess.check_output(cmd, shell=True)
-                    list_write(tarred_list, barcode)
+                    write_list(tarred_list, item_barcode)
                     print('\tTar archive created')
                 except (RuntimeError, PermissionError, IOError, EnvironmentError, subprocess.CalledProcessError) as e:
                     print("\tUnexpected error: ", e)
-                    list_write(failed_list, barcode, 'tar\t%s' % e)
+                    write_list(failed_list, '%s\ttar\t%s' % (item_barcode, e))
                     continue
                   
             '''MOVE TAR TO ARCHIVER LOCATION'''
-            if not check_list(moved_list, barcode):
+            if not check_list(moved_list, item_barcode):
                 #Just in case we are restarting from an error   
-                tar_file = '%s.tar' % os.path.basename(target)
+                tar_file = '%s.tar' % os.path.basename(destination)
                 
                 print('\n\tMoving tar file to Archiver folder...')
                 
-                complete_sip = os.path.join(shipment, tar_file)
+                complete_sip = os.path.join(ship_dir, tar_file)
                 
                 #get some stats on SIP
                 print('\tCalculating SIP size...')
@@ -760,20 +739,20 @@ def main():
                 SIP_dict = {'size' : SIP_size, 'md5' : SIP_md5, 'filename' : tar_file}
                 
                 #store values in a file just in case we have a failure or are otherwise interrupted...
-                with open(os.path.join(report_dir, 'SIP_%s.txt' % barcode), 'wb') as file:
+                with open(os.path.join(bag_report_dir, 'SIP_%s.txt' % item_barcode), 'wb') as file:
                     pickle.dump(SIP_dict, file)
                     
                 try:
-                    shutil.move(complete_sip, destination)
-                    list_write(moved_list, barcode)
+                    shutil.move(complete_sip, archiver_drop_off)
+                    write_list(moved_list, item_barcode)
                     print('\tTar file moved.')
                 except (RuntimeError, PermissionError, IOError, EnvironmentError) as e:
                     print("\tUnexpected error: ", e)
-                    list_write(failed_list, barcode, 'move\t%s' % e)
+                    write_list(failed_list, '%s\tmove\t%s' % (item_barcode, e))
                     continue
                         
             '''WRITE STATS TO MASTER SPREADSHEET'''
-            if not check_list(metadata_list, barcode):
+            if not check_list(metadata_list, item_barcode):
                 
                 sep_size = 0
                 sep_files = 0
@@ -785,7 +764,7 @@ def main():
                         fi = csv.reader(fi, delimiter='\t')
                         for line in fi:
                             try:
-                                if barcode == line[0]:
+                                if item_barcode == line[0]:
                                     sep_files = int(line[1])
                                     sep_size = int(line[2])
                                     di_sep = int(line[3])
@@ -795,18 +774,20 @@ def main():
                                 continue
                                     
                 #Recalculate size of extracted files
-                if row[16].value is None:
-                    extracted_size = get_size(os.path.join(target, 'data', 'files')) 
+                extent_raw = return_spreadsheet_value(ws_app, current_row, ws_columns['extent_raw'])
+                
+                if extent_raw is None:
+                    extracted_size = get_size(os.path.join(destination, 'data', 'files')) 
                 else:
-                    extracted_size = (int(row[16].value) - sep_size)
+                    extracted_size = (int(extent_raw) - sep_size)
                     
                 #write corrected size back to spreadsheet
-                ws.cell(row=row[0].row, column=17, value=extracted_size)
+                ws_app.cell(row=current_row, column=ws_columns['extent_raw'], value=extracted_size)
                 
                 #if there are any files separated, adjust extracted file count
                 extracted_no = int(row[17].value) - sep_files
                 if extracted_no != row[17].value:
-                    ws.cell(row=row[0].row, column=18, value=extracted_no)
+                    ws_app.cell(row=row[0].row, column=18, value=extracted_no)
                     
                 wb.save(spreadsheet)
                 
@@ -814,7 +795,7 @@ def main():
                 try:
                     SIP_dict
                 except NameError:
-                    SIP_stats = os.path.join(report_dir, 'SIP_%s.txt' % barcode)
+                    SIP_stats = os.path.join(bag_report_dir, 'SIP_%s.txt' % item_barcode)
                     SIP_dict = {}
                     with open(SIP_stats, 'rb') as file:
                         SIP_dict = pickle.load(file)
@@ -827,6 +808,8 @@ def main():
                 except IndexError:
                     access_option = '-'
                     
+                '''MAYBE CAPTURE THIS INFORMATION AT BEGINNING OF PROCESS SO IT CAN BE USED THROUGHTOUT?'''
+                
                 coll_title = str(row[2].value)
                 coll_id = str(row[3].value)
                 creator = str(row[4].value)
@@ -841,12 +824,12 @@ def main():
                 latest_date = str(row[22].value)
                 
                 #determine appropriate row: overwrite if already existing or add new row, otherwise
-                newrow = return_spreadsheet_row(item_ws, barcode)
+                newrow = return_spreadsheet_row(item_ws, item_barcode)
                 
                 #write information on the specfic barcode
-                item_ws.cell(row=newrow, column=1).value = barcode
-                item_ws.cell(row=newrow, column=2).value = unit
-                item_ws.cell(row=newrow, column=3).value = shipmentID
+                item_ws.cell(row=newrow, column=1).value = item_barcode
+                item_ws.cell(row=newrow, column=2).value = unit_name
+                item_ws.cell(row=newrow, column=3).value = shipmentDate
                 item_ws.cell(row=newrow, column=4).value = coll_title
                 item_ws.cell(row=newrow, column=5).value = coll_id
                 item_ws.cell(row=newrow, column=6).value = creator
@@ -886,27 +869,27 @@ def main():
                 with open(stats_doc, 'wb') as file:
                     pickle.dump(shipment_stats, file)
                 
-                list_write(metadata_list, barcode)
+                write_list(metadata_list, item_barcode)
 
-                os.remove(os.path.join(report_dir, 'SIP_%s.txt' % barcode))
+                os.remove(os.path.join(bag_report_dir, 'SIP_%s.txt' % item_barcode))
                 
             '''CLEAN ORIGINAL BARCODE FOLDER'''
             #remove original folder
-            if not check_list(cleaned_list, barcode):
+            if not check_list(completed_list, item_barcode):
                 print('\n\tRemoving original folder...')
-                cmd = 'RD /S /Q "%s"' % target
+                cmd = 'RD /S /Q "%s"' % destination
                 try:
                     subprocess.check_output(cmd, shell=True)
-                    list_write(cleaned_list, barcode)
+                    write_list(completed_list, item_barcode)
                     print('\tFolder removed')
                 #note failure, but write metadata to master spreadsheet
                 except (PermissionError, subprocess.CalledProcessError, OSError) as e:
                     print("\tUnexpected error: ", e)
-                    list_write(failed_list, barcode, 'clean_original\t%s' % e)
+                    write_list(failed_list, '%s\tclean_original\t%s' % (item_barcode, e))
                     continue
             
             #barcode is now done!
-            print('\n\t%s COMPLETED\n---------------------------------------------------------------' % barcode)
+            print('\n\t%s COMPLETED\n---------------------------------------------------------------' % item_barcode)
             
             #if barcode had previously failed, remove it from list.
             if os.path.exists(failed_list):
@@ -915,23 +898,23 @@ def main():
             
                 with open(failed_list, "w") as f:
                     for line in lines:
-                        if not barcode in line:
+                        if not item_barcode in line:
                             f.write('%s\n' % line)
     
         #if other appraisal decision is indicated, note barcode in a list and move folder.
         else:
-            if not check_list(other_list, barcode):
-                list_write(other_list, barcode, str(row[27].value))
+            if not check_list(other_list, item_barcode):
+                write_list(other_list, '%s\t%s' % (item_barcode, str(row[27].value)))
                 
                 if not os.path.exists('review'):
                     os.mkdir('review')
                 
-                shutil.move(barcode, 'review')
+                shutil.move(item_barcode, 'review')
                 
                 print('\n\tAlternate appraisal decision: %s. \n\tConfer with collecting unit as needed.' % str(row[27].value))
             
             else:
-                print('\n\t%s has been moved to the "Review" folder.' % barcode)
+                print('\n\t%s has been moved to the "Review" folder.' % item_barcode)
             
     '''CHECK PROCESS FOR MISSING/FAILED ITEMS'''    
     #get lists from status files: how many barcodes are in each list
@@ -1002,15 +985,15 @@ def main():
         
         for row in iterrows:    
             if not row[0].value is None:
-                if unit in row[0].value and shipmentID in row[1].value:
+                if unit_name in row[0].value and shipmentDate in row[1].value:
                     newrow = row[0].row
                     break
         
         print('\nWriting cumulative information to spreadsheet...')
         
         #write (or update) shipment info in cumulative sheet of master workbook
-        cumulative_ws.cell(row=newrow, column=1, value = unit) 
-        cumulative_ws.cell(row=newrow, column=2, value = shipmentID)
+        cumulative_ws.cell(row=newrow, column=1, value = unit_name) 
+        cumulative_ws.cell(row=newrow, column=2, value = shipmentDate)
         cumulative_ws.cell(row=newrow, column=3, value = shipment_stats['sip_count'])
         cumulative_ws.cell(row=newrow, column=4, value = shipment_stats['extracted_no'])
         cumulative_ws.cell(row=newrow, column=5, value = shipment_stats['extracted_size'])
@@ -1043,7 +1026,7 @@ def main():
     for pu, id in enumerate(puid_list):
         puid_dict[id] = pu+1
 
-    format_sheet = 'puids_%s_%s' % (unit, shipmentID)
+    format_sheet = 'puids_%s_%s' % (unit_name, shipmentDate)
     
     #if this puid sheet already exists, we'll just remove it and start anew...
     if format_sheet in master_wb.sheetnames:
@@ -1059,7 +1042,7 @@ def main():
         for key in format_list[index]:
         
             #retrieve the information on puids we separated; this is a dictionary with puid as key and # of files separated as value
-            separated_puids = os.path.join(report_dir, '%s_separated_puids.txt' % key)
+            separated_puids = os.path.join(bag_report_dir, '%s_separated_puids.txt' % key)
             sep_puid_count = {}
             if os.path.exists(separated_puids):
                 with open(separated_puids, 'rb') as f:
@@ -1101,14 +1084,14 @@ def main():
     
     
     
-    print('\nPackaging for shipment %s shipment %s completed!!' % (unit, shipmentID))
+    print('\nPackaging for shipment %s shipment %s completed!!' % (unit_name, shipmentDate))
     
     #save workbooks
     wb.save(spreadsheet)
     master_wb.save(master_spreadsheet)
     
     #save a copy of the master spreadsheet to SDA
-    shutil.copy(master_spreadsheet, destination)
+    shutil.copy(master_spreadsheet, archiver_drop_off)
     
 
 if __name__ == '__main__':
