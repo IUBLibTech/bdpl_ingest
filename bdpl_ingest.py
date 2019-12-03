@@ -790,11 +790,12 @@ def cdda_image_creation(folders, item_barcode, sourceDevice):
         
         #toc2cue may try to encode path information as binary data--let's fix that
         with open(cue, 'rb') as infile:
-            cue_info = infile.readlines()
+            cue_info = infile.readlines()[1:]
         
-        cue_info[0] = b'FILE "%s" BINARY\n' % cdr_bin
+        with open(cue, 'w') as outfile:
+            outfile.write('FILE "%s" BINARY\n' % os.path.basename(cdr_bin))
         
-        with open(cue, 'wb') as outfile:
+        with open(cue, 'ab') as outfile:
             for line in cue_info:
                 outfile.write(line)           
         
@@ -804,11 +805,11 @@ def cdda_image_creation(folders, item_barcode, sourceDevice):
         if x == 1:
             new_cue = os.path.join(files_dir, '%s.cue' % item_barcode)
             
-            #update file information
-            cue_info[0] = b'FILE "%s.wav" WAVE\n' % item_barcode
-            
             #now write the new cue file
-            with open(new_cue, 'wb') as outfile:
+            with open(new_cue, 'w') as outfile:
+                outfile.write('FILE "%s.wav" WAVE\n' % item_barcode)
+                
+            with open(new_cue, 'ab') as outfile:
                 for line in cue_info:
                     outfile.write(line)
                 
@@ -2436,7 +2437,10 @@ def writeSpreadsheet(folders, unit_name, shipmentDate, item_barcode, gui_vars, j
         try:
             temp_dict = [f for f in premis_list if f['eventType'] == 'disk image creation'][-1]
         except IndexError:
-            temp_dict = {'linkingAgentIDvalue' : '-', 'timestamp' : '-', 'eventOutcomeDetail' : 'Operation not completed.'}
+            try: 
+                temp_dict = [f for f in premis_list if f['eventType'] == 'normalization'][-1]
+            except IndexError:
+                temp_dict = {'linkingAgentIDvalue' : '-', 'timestamp' : '-', 'eventOutcomeDetail' : 'Operation not completed.'}
     elif jobType == 'Copy_only':
         try:
             temp_dict = [f for f in premis_list if f['eventType'] == 'replication'][-1]
