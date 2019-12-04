@@ -2541,10 +2541,13 @@ def writeSpreadsheet(folders, unit_name, shipmentDate, item_barcode, gui_vars, j
     metadata_dict['full_report'] = '=HYPERLINK("{}", "{}")'.format(".\\%s\\metadata\\reports\\report.html" % item_barcode, "View report")
     metadata_dict['transfer_link'] = '=HYPERLINK("{}", "{}")'.format(".\\%s" % item_barcode, "View transfer folder")
     
-    if metadata_dict['initial_appraisal'] == "No appraisal needed":
-        metadata_dict['initial_appraisal'] = "Transfer to SDA"
-    elif metadata_dict['initial_appraisal'] == '-':
-        del metadata_dict['initial_appraisal']
+    try:
+        if metadata_dict['initial_appraisal'] == "No appraisal needed":
+            metadata_dict['initial_appraisal'] = "Transfer to SDA"
+        elif metadata_dict['initial_appraisal'] == '-':
+            del metadata_dict['initial_appraisal']
+    except KeyError:
+        pass
         
     #write back metadata, just in case...
     pickleDump('metadata_dict', metadata_dict, folders)
