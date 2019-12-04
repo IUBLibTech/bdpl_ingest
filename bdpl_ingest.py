@@ -40,6 +40,7 @@ import glob
 import hashlib
 import psutil
 import chardet
+from urllib.parse import unquote
 
 # from dfxml project
 import Objects
@@ -635,6 +636,13 @@ def lsdvd_check(folders, item_barcode, drive_letter):
     try:
         doc = etree.parse(lsdvdout, parser=parser)
         titlecount = int(doc.xpath("count(//lsdvd//track)"))
+        
+        #check for PAL content, just in case...
+        formats = doc.xpath("//format")
+        if [f for f in formats if f.text == 'PAL']:
+            titlecount = 'PAL'
+            return titlecount
+            
     #if lsdvd fails or information not in report, get the title count by parsing directory...
     except (OSError, lxml.etree.XMLSyntaxError):
         titlelist = glob.glob(os.path.join(drive_letter, '**/VIDEO_TS', '*_*_*.VOB'), recursive=True)
@@ -943,8 +951,11 @@ def transferContent(unit_name, shipmentDate, item_barcode, transfer_vars):
         if titlecount > 0:       
             drive_letter = "%s\\" % optical_drive_letter()
             normalize_dvd_content(folders, item_barcode, titlecount, drive_letter)
+        elif titlecount == 'PAL':
+            print('\n\nWARNING: DVD is PAL formatted! Need to figure out correct ffmpeg command; stop file normalization...')
+            return
         else:
-            print('\nWARNING: DVD does not appear to have any titles.  Manually review disc and re-transfer content if necessary.')
+            print('\nWARNING: DVD does not appear to have any titles; job type should likely be Disk_image.  Manually review disc and re-transfer content if necessary.')
             return
     
     elif jobType == 'CDDA':
@@ -2116,6 +2127,48 @@ def dir_tree(folders, item_barcode):
     
     print('\n\tDirectory structure documented; moving on to next step...')
 
+def droid_to_siegfried(infile, outfile):
+
+    counter = 0
+
+    with open(outfile, 'w', newline='') as f1:
+        csvWriter = csv.writer(f1)
+        header = ['filename', 'filesize', 'modified', 'errors', 'namespace', 'id', 'format', 'version', 'mime', 'basis', 'warning']
+        csvWriter.writerow(header)
+        with open(infile, 'r', encoding='utf8') as f2:
+            csvReader = csv.reader(f2)
+            next(csvReader)
+            for row in csvReader:
+                counter+=1
+                print('\rWorking on row %d' % counter, end='')
+                
+                if 'zip:file:' in row[2]:
+                    filename = row[2].split('zip:file:/', 1)[1].replace('.zip!', '.zip#').replace('/', '\\')
+                else:
+                    filename = row[2].split('file:/', 1)[1]
+                filename = unquote(filename)
+                
+                filesize = row[7]
+                modified = row[10]
+                errors = ''
+                namespace = 'pronom'
+                if row[14] == "":
+                    id = 'UNKNOWN'
+                else:
+                    id = row[14]
+                format = row[16]
+                version = row[17]
+                mime = row[15]
+                basis = ''
+                if row[11].lower() == 'true':
+                    warning = 'extension mismatch'
+                else:
+                    warning = ''
+                
+                data = [filename, filesize, modified, errors, namespace, id, format, version, mime, basis, warning]
+                
+                csvWriter.writerow(data)
+
 def format_analysis(folders, item_barcode):
     
     files_dir = folders['files_dir']
@@ -2126,10 +2179,10 @@ def format_analysis(folders, item_barcode):
     print('\n\tFile format identification with siegfried...') 
 
     sfcmd = 'sf -version'
-    siegfried_version = subprocess.check_output(sfcmd, shell=True, text=True).replace('\n', ' ')
+    format_version = subprocess.check_output(sfcmd, shell=True, text=True).replace('\n', ' ')
     
     sf_file = os.path.join(reports_dir, 'siegfried.csv')
-    sf_command = 'sf -z -csv "%s" > "%s"' % (files_dir, sf_file)
+    format_command = 'sf -z -csv "%s" > "%s"' % (files_dir, sf_file)
     
     #create timestamp
     timestamp = str(datetime.datetime.now())
@@ -2137,10 +2190,33 @@ def format_analysis(folders, item_barcode):
     if os.path.exists(sf_file):
         os.remove(sf_file)                                                                 
     
-    exitcode = subprocess.call(sf_command, shell=True, text=True)
+    exitcode = subprocess.call(format_command, shell=True, text=True)
     
+    #if siegfried fails, then we'll run DROID
+    if exitcode != 0 and os.path.getsize(sf_file) == 0:
+        print('\n\tFile format identification with siegfried failed; now attempting with DROID...\n') 
+        
+        droid_profile = os.path.join(temp_dir, 'droid.droid')
+        droid_out = os.path.join(temp_dir, 'droid.csv')
+        
+        droid_ver = "DROID v%s" % subprocess.check_output('droid -v', shell=True, text=True).strip()
+        
+        cmd = 'droid -RAq -a "%s" -p "%s"' % (files_dir, droid_profile)
+        
+        exitcode = subprocess.call(cmd, shell=True)
+        
+        cmd2 = 'droid -p "%s" -e "%s"' % (droid_profile, droid_out)
+        
+        subprocess.call(cmd2, shell=True)
+        
+        #consolidate commands for premis
+        format_command = "%s && %s" % (cmd, cmd2)
+        
+        #now reformat droid output to be like sf output
+        droid_to_siegfried(droid_out, sf_file)
+        
     premis_list = pickleLoad('premis_list', folders, item_barcode)
-    premis_list.append(premis_dict(timestamp, 'format identification', exitcode, sf_command, 'Determined file format and version numbers for content recorded in the PRONOM format registry.', siegfried_version))
+    premis_list.append(premis_dict(timestamp, 'format identification', exitcode, format_command, 'Determined file format and version numbers for content recorded in the PRONOM format registry.', format_version))
     pickleDump('premis_list', premis_list, folders)
 
 def stats_and_report_creation(folders, item_barcode, re_analyze, jobType):
@@ -2926,6 +3002,7 @@ def update_software():
     #make sure PRONOM and antivirus signatures are up to date
     sfup = 'sf -update'
     fresh_up = 'freshclam'
+    droid_up = 'droid -d'
     
     clam_sig1 = "C:/BDPL/resources/clamav/database/daily.cvd" 
     clam_sig2 = "C:/BDPL/resources/clamav/database/daily.cld"
@@ -2947,6 +3024,7 @@ def update_software():
         
         subprocess.check_output(sfup, shell=True, text=True)
         subprocess.check_output(fresh_up, shell=True, text=True)
+        subprocess.check_output(droid_up, shell=True, text=True)
         
         print('\nUpdate complete!  Time to ingest some date...')
 
