@@ -1506,7 +1506,7 @@ def get_stats(folders, cursor, html, item_barcode, re_analyze, jobType):
     #let's not accept file mtimes that were set when content was replicated.  Compare file time against timestamp for replication...
     premis_list = pickleLoad('premis_list', folders, item_barcode)
     try:
-        bdpl_time = [p for p in premis_list if p['eventType'] == 'replication'][0]['timestamp'].split('.')[0]
+        bdpl_time = [p for p in premis_list if p['eventType'] == 'replication'][0]['timestamp'].split('.')[0].replace('T', ' ')
     except IndexError:
         bdpl_time = datetime.datetime.fromtimestamp(os.path.getmtime(os.path.join(temp_dir, 'folders_created.txt'))).isoformat().replace('T', ' ').split('.')[0]
     
