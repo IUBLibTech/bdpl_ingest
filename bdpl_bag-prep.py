@@ -17,21 +17,6 @@ from bdpl_ripstation_ingest import *
 
 
 
-def write_list(list_name, message):
-    with open(list_name, 'a') as f:
-        f.write(message)
-    
-def check_list(list_name, item_barcode):
-    if not os.path.exists(list_name):
-        return False
-    with open(list_name, 'r') as f:
-        for item in f:
-            if item_barcode in item.strip():
-                return True
-            else:
-                continue
-        return False
-
 def get_size(start_path):
     total_size = 0
     if os.path.isfile(start_path):
@@ -149,14 +134,18 @@ def main():
     
     '''SET VARIABLES'''
     #Identify where files will be moved ###### UPDATE TO ARCHIVER location #######
-    archiver_drop_off = 'W:/Archiver_spool/general%2fmediaimages'
+    archiver_home = 'C:/BDPL'
+    archiver_drop_off = os.path.join(archiver_home, 'Archiver_spool', 'general%2fmediaimages')
     
     if not os.path.exists(archiver_drop_off):
         print('WARNING: incorrect server shared mapped to W: drive.  Reconnect if necessary.')
         sys.exit(1)
     
     #open master workbook and get ready to write
-    master_spreadsheet = 'W:/spreadsheets/bdpl_master_spreadsheet.xlsx'
+    master_spreadsheet = os.path.join(archiver_home, 'spreadsheets', 'bdpl_master_spreadsheet.xlsx')
+    if not os.path.exists(master_spreadsheet):
+        print('WARNING: could not locate master spreadsheet; make sure it is located at %s' % master_spreadsheet)
+        sys.exit(1)
     master_wb = openpyxl.load_workbook(master_spreadsheet)
     item_ws = master_wb['Item']
     cumulative_ws = master_wb['Cumulative']
@@ -242,8 +231,8 @@ def main():
     format_report = os.path.join(bag_report_dir, 'cumulative-formats.txt') # for tracking information on file formats
     puid_report = os.path.join(bag_report_dir, 'puid-report.txt') # list of all puids in shipment
     duration_doc = os.path.join(bag_report_dir, 'duration.txt')
-    missing_doc = os.path.join(bag_report_dir, 'missing.txt')
     stats_doc = os.path.join(bag_report_dir, 'shipment_stats.txt')    
+    
     '''SET UP: GATHER INITIAL STATS AND CHECK FOR INCONSISTENCIES WITH BARCODE FOLDERS IN SHIPMENT'''
     #make our report directory
     if not os.path.exists(bag_report_dir):
@@ -285,41 +274,40 @@ def main():
                     write_list(failed_list, '%s\tmove_unaccounted\t%s' % (item_barcode, e))
 
     #Get date info on items for shipment stats (acquired by using max/min of dir_list, using modified date as key)
-    latest_date = datetime.datetime.fromtimestamp(os.stat(max(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')
-    earliest_date = datetime.datetime.fromtimestamp(os.stat(min(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')        
-    
-    duration_stats = {}
-    if os.path.exists(duration_doc):
-        with open(duration_doc, 'wb') as file:
-            duration_stats = pickle.load(file)
-            
-        if earliest_date < duration_stats['earliest']:
+    if len(dir_list) > 0:
+        latest_date = datetime.datetime.fromtimestamp(os.stat(max(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')
+        earliest_date = datetime.datetime.fromtimestamp(os.stat(min(dir_list, key=os.path.getmtime)).st_ctime).strftime('%Y%m%d')        
+        
+        duration_stats = {}
+        if os.path.exists(duration_doc):
+            with open(duration_doc, 'rb') as file:
+                duration_stats = pickle.load(file)
+                
+            if earliest_date < duration_stats['earliest']:
+                duration_stats['earliest'] = earliest_date
+                
+            if latest_date > duration_stats['latest']:
+                duration_stats['latest'] = latest_date
+        
+        else:
             duration_stats['earliest'] = earliest_date
-            
-        if latest_date > duration_stats['latest']:
             duration_stats['latest'] = latest_date
-    
-    else:
-        duration_stats['earliest'] = earliest_date
-        duration_stats['latest'] = latest_date
 
-    tdelta = datetime.datetime.strptime(duration_stats['latest'], '%Y%m%d') - datetime.datetime.strptime(duration_stats['earliest'], '%Y%m%d')
-    
-    #use 1 day as minimum timedelta
-    if tdelta < datetime.timedelta(days=1):
-        duration_stats['duration'] = 1
-    else:
-        duration_stats['duration'] = int(str(tdelta).split()[0])
-    
-    #write duration and 'missing' stats to file
-    with open(duration_doc, 'wb') as file:
-        pickle.dump(duration_stats, file)
-    with open(missing_doc, 'wb') as file:
-        pickle.dump(missing_from_dir), file)
+        tdelta = datetime.datetime.strptime(duration_stats['latest'], '%Y%m%d') - datetime.datetime.strptime(duration_stats['earliest'], '%Y%m%d')
+        
+        #use 1 day as minimum timedelta
+        if tdelta < datetime.timedelta(days=1):
+            duration_stats['duration'] = 1
+        else:
+            duration_stats['duration'] = int(str(tdelta).split()[0])
+        
+        #write duration and 'missing' stats to file
+        with open(duration_doc, 'wb') as file:
+            pickle.dump(duration_stats, file)
 
     '''INITIATE PACKAGING'''
     #get total number of rows, + 1
-    maxrow = ws_app.max_rows() + 1
+    maxrow = ws_app.max_row + 1
     
     #get all of our current spreadsheet columns
     ws_columns = get_spreadsheet_columns(ws_app)
@@ -375,7 +363,7 @@ def main():
             continue
         
         #if content has been determined to be of value, complete prep workflow.
-        elif initial_appraisal == "Transfer to SDA":
+        elif metadata_dict['initial_appraisal'] == "Transfer to SDA":
 
             '''CHECK THAT FOLDER EXISTS'''            
             
@@ -393,11 +381,11 @@ def main():
             if not check_list(prep_list, item_barcode):
                 
                 #doublecheck if no file information has been reported on spreadsheet
-                if metadata_dict['item_file_count'] is None or file_count == 0:
+                if metadata_dict['item_file_count'] is None or metadata_dict['item_file_count'] == 0:
                     #check for content in our image_dir and files_dir; if both are empty, fail barcode.
                     if not checkFiles(image_dir) and not checkFiles(files_dir):
                         write_list(failed_list, '%s\tcheck_folder\tNO CONTENT IN BARCODE FOLDER: CHANGE APPRAISAL DECISION?' % item_barcode)
-                            continue
+                        continue
             
                 #get file format info to include with master spreadsheet.  If format and puid lists exist, load and then loop through format report...
                 format_list = []
@@ -411,7 +399,7 @@ def main():
                         puid_list = pickle.load(f)
                             
                 #get file format/puid information for cumulative stats
-                format_csv = os.path.join(report_dir, 'formatVersions.csv')
+                format_csv = os.path.join(reports_dir, 'formatVersions.csv')
                 if os.path.exists(format_csv):
                     temp_list = []
                     with open(format_csv, 'r') as fi:
@@ -454,11 +442,11 @@ def main():
                         shutil.rmtree(remove_dir)
              
                 for f in ["duplicates.csv", "errors.csv", "formats.csv", "formatVersions.csv", "mimetypes.csv", "unidentified.csv", "uniqueyears.csv", "years.csv", 'email_domain_histogram.txt', 'find_histogram.txt', 'telephone_histogram.txt', 'report.html']:
-                    report = os.path.join(report_dir, f)
+                    report = os.path.join(reports_dir, f)
                     if os.path.exists(report):
                         os.remove(report)
                         
-                assets = os.path.join(report_dir, 'assets')
+                assets = os.path.join(reports_dir, 'assets')
                 if os.path.exists(assets):
                     shutil.rmtree(assets)
                         
@@ -651,7 +639,7 @@ def main():
 
                 
                 #description for bag-info.txt currently includes source media, label transcription, and appraisal note.
-                desc = 'Source: %s. | Label: %s. | Title: %s. | Appraisal notes: %s. | Date range: %s-%s' %(metadata_dict['content_source_type'], metadata_dict['label_transcription'], metadata_dict.get(item_title, '-'),  metadata_dict['appraisal_notes'], metadata_dict['begin_date'], metadata_dict['end_date'])
+                desc = 'Source: %s. | Label: %s. | Title: %s. | Appraisal notes: %s. | Date range: %s-%s' %(metadata_dict['content_source_type'], metadata_dict['label_transcription'], metadata_dict.get('item_title', '-'),  metadata_dict['appraisal_notes'], metadata_dict['begin_date'], metadata_dict['end_date'])
                 
                 desc = desc.replace('\n', ' ')    
         
@@ -661,7 +649,7 @@ def main():
                     print('\tBagging complete.')
                 except (RuntimeError, PermissionError, bagit.BagError, OSError) as e:
                     print("\tUnexpected error: ", e)
-                    write_list(failed_list, '%s\tbagit\t%s' % (item_barcode, e)
+                    write_list(failed_list, '%s\tbagit\t%s' % (item_barcode, e))
                     continue
             
             '''CREATE TAR'''
@@ -763,7 +751,7 @@ def main():
                 if metadata_dict['extent_raw'] is None:
                     extracted_size = get_size(os.path.join(destination, 'data', 'files')) 
                 else:
-                    extracted_size = (int(extent_raw) - sep_size)
+                    extracted_size = (int(metadata_dict['extent_raw']) - sep_size)
                     
                 #write corrected size back to spreadsheet
                 ws_app.cell(row=current_row, column=ws_columns['extent_raw'], value=extracted_size)
@@ -790,13 +778,13 @@ def main():
                     if metadata_dict['jobType'] in ['CDDA', 'DVD']:
                         access_option = '%s: deposit to MCO' % metadata_dict['jobType']
 
-                except IndexError:
+                except KeyError:
                     pass
                     
                 '''MAYBE CAPTURE THIS INFORMATION AT BEGINNING OF PROCESS SO IT CAN BE USED THROUGHTOUT?'''
                 
                 #determine appropriate row: overwrite if already existing or add new row, otherwise
-                newrow = return_spreadsheet_row(item_ws, item_barcode)
+                status, newrow = return_spreadsheet_row(item_ws, item_barcode)
                 
                 #write information on the specfic barcode
                 item_ws.cell(row=newrow, column=1).value = metadata_dict['item_barcode']
@@ -876,7 +864,7 @@ def main():
         #if other appraisal decision is indicated, note barcode in a list and move folder.
         else:
             if not check_list(other_list, item_barcode):
-                write_list(other_list, '%s\t%s' % (item_barcode, str(row[27].value)))
+                write_list(other_list, '%s\t%s' % (item_barcode, metadata_dict['initial_appraisal']))
                 
                 if not os.path.exists('review'):
                     os.mkdir('review')
@@ -1053,7 +1041,6 @@ def main():
                 count += c.value
                 colno = c.column
         fws.cell(row=max_row, column=colno, value=count)
-    
     
     
     print('\nPackaging for shipment %s shipment %s completed!!' % (unit_name, shipmentDate))

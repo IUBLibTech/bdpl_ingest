@@ -65,7 +65,7 @@ def check_list(list_name, item_barcode):
 
 def write_list(list_name, message):
     with open(list_name, 'a') as f:
-        f.write(message)
+        f.write('%s\n' % message)
 
 def main():
 
@@ -158,7 +158,7 @@ def main():
             status, msg = first_run(unit_name, shipmentDate, item_barcode, gui_vars)
             if not status:
                 print('\nWARNING: issue with spreadsheet metadata!  Moving on to next item...')
-                write_list(failed_ingest, '%s\t%s\n' % (item_barcode, msg))
+                write_list(failed_ingest, '%s\t%s' % (item_barcode, msg))
                 continue
 
             premis_list = pickleLoad('premis_list', folders, item_barcode)
@@ -175,7 +175,7 @@ def main():
                 #make sure required components are present
                 if not '.wav' or not '.cue' in [os.path.splitext(x)[1] for x in os.listdir(files_dir)]:
                     print("\nMissing '.wav' or '.cue' file; moving on to next item...")
-                    write_list(failed_ingest, '%s\tMissing .wav or .cue file\n' % item_barcode)
+                    write_list(failed_ingest, '%s\tMissing .wav or .cue file' % item_barcode)
                     continue
                 
                 #write premis information for creating WAV; we assume that this operation was successful
@@ -270,12 +270,12 @@ def main():
                         
                     elif os.path.exists(os.path.join(image_dir, '%s.mdf' % item_barcode)):
                         print('\nWARNING: item is Compact Disc Digital Audio; unable to transfer using RipStation DataGrabber.')
-                        write_list(failed_ingest, '%s\tDisc is CDDA; transfer using original RipStation\n' % item_barcode)
+                        write_list(failed_ingest, '%s\tDisc is CDDA; transfer using original RipStation' % item_barcode)
                         continue
                         
                     else:
                         print('\nWARNING: disk image does not exist!  Moving on to next item...')
-                        write_list(failed_ingest, '%s\tDisk image does not exist\n' % item_barcode)
+                        write_list(failed_ingest, '%s\tDisk image does not exist' % item_barcode)
                         continue
                 
                 #write premis information for disk image creation.  Even if image is unreadable, we assume that this operation was successful
@@ -296,7 +296,7 @@ def main():
                 exitcode = mount_iso(orig_imagefile)
                 if exitcode != 0:
                     print('\nWARNING: failed to mount disk image!  Moving on to next item...')
-                    write_list(failed_ingest, '%s\tFailed to mount disk image\n' % item_barcode)
+                    write_list(failed_ingest, '%s\tFailed to mount disk image' % item_barcode)
                     continue
                 
                 #set mediaStatus variable: confirms that 'media' (mounted disk image) is present; required by bdpl_ingest functions
@@ -320,7 +320,7 @@ def main():
                     exitcode = dismount_iso(orig_imagefile)
                     if exitcode != 0:
                         print('\nWARNING: failed to dismount disk image!  Moving on to next item...')
-                        write_list(failed_ingest, '%s\tFailed to dismount disk image\n' % item_barcode)
+                        write_list(failed_ingest, '%s\tFailed to dismount disk image' % item_barcode)
                         continue
                     
                     #rename to '.dd' file extension
@@ -363,7 +363,7 @@ def main():
                     exitcode = dismount_iso(orig_imagefile)
                     if exitcode != 0:
                         print('\nWARNING: failed to dismount disk image!  Moving on to next item...')
-                        write_list(failed_ingest, '%s\tFailed to dismount disk image\n' % item_barcode)
+                        write_list(failed_ingest, '%s\tFailed to dismount disk image' % item_barcode)
                         continue
                     
                     #rename to '.dd' file extension
@@ -374,7 +374,7 @@ def main():
                         f.write('%s\n' % item_barcode)
                 else:
                     print('\nWARNING: failed to replicate files!  Moving on to next item...')
-                    write_list(failed_ingest, '%s\tFailed to replicate files\n' % item_barcode)
+                    write_list(failed_ingest, '%s\tFailed to replicate files' % item_barcode)
                     continue
             
         if not check_list(analyzed, item_barcode):
