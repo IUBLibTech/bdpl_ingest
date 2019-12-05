@@ -2446,7 +2446,7 @@ def return_spreadsheet_row(ws, item_barcode):
     #if barcode exists in spreadsheet, set variable to that row
     for cell in ws['A']:
         if (cell.value is not None):
-            if item_barcode in str(cell.value):
+            if item_barcode == str(cell.value).strip():
                 newrow = cell.row
                 found = True
                 break
@@ -2805,8 +2805,12 @@ def load_metadata(folders, item_barcode, spreadsheet):
         #get our list of columns; if the 'note field' cell has content, add to the dictionary
         ws_cols = get_spreadsheet_columns(app_ws)
         
-        if not app_ws.cell(row=current_row, column=ws_cols['technician_note']).value is None:
-            metadata_dict['technician_note'] = app_ws.cell(row=current_row, column=ws_cols['technician_note']).value
+        for key in ws_cols.keys():
+            if key == 'item_barcode':
+                pass
+            else:
+                if not app_ws.cell(row=current_row, column=ws_cols[key]).value is None:
+                    metadata_dict[key] = app_ws.cell(row=current_row, column=ws_cols[key]).value
            
     pickleDump('metadata_dict', metadata_dict, folders)
 
@@ -2842,6 +2846,7 @@ def metadata_to_gui(gui_vars, folders, item_barcode):
             notevalue = metadata_dict['technician_note']
     except KeyError:
         notevalue = ''
+        
     gui_vars['technician_note'].configure(state='normal')
     gui_vars['technician_note'].delete('1.0', END)
     gui_vars['technician_note'].insert(INSERT, notevalue)

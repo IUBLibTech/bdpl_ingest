@@ -145,10 +145,6 @@ def separate_content(sep_dest, file, log, bag_report_dir, item_barcode):
     with open(separated_file_stats, 'wb') as f:
         pickle.dump(temp_list, f)
 
-def return_spreadsheet_value(ws, current_row, current_column):
-
-    return ws.cell(row=current_row, column=current_column).value
-
 def main():
     
     '''SET VARIABLES'''
@@ -210,8 +206,7 @@ def main():
                 sys.exit(1)
 
         else:
-            separations_manifest = ''
-                    
+            separations_manifest = ''            
     
         info = {'unit' : unit_name, 'spreadsheet' : spreadsheet, 'separations_manifest' : separations_manifest}
 
@@ -333,6 +328,7 @@ def main():
     for item in dir_list:
         
         item_barcode = item.strip()
+        folders = bdpl_folders(unit_name, shipmentDate, item_barcode)
         
         status, current_row = return_spreadsheet_row(ws_app, item_barcode)
         
@@ -344,7 +340,12 @@ def main():
             except (PermissionError, OSError) as e:
                 write_list(failed_list, '%s\tmove_unaccounted\t%s' % (item_barcode, e))
             continue
-
+        
+        #get our metadata ready; may have to reload from spreadsheet for older transfers
+        load_metadata(folders, item_barcode, spreadsheet)
+        metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
+        
+        
         #skip to next barcode if current one has already finished workflow
         if check_list(completed_list, item_barcode):
             print('\n%s completed.' % item_barcode)
@@ -356,10 +357,8 @@ def main():
  
         print('\nWorking on item: %s' % item_barcode)    
         
-        initial_appraisal = return_spreadsheet_value(ws_app, current_row, ws_columns['initial_appraisal'])
-        
         #if content will not be moved to SDA, just skip folder for now and write to skipped and moved lists
-        if initial_appraisal == "Delete content":
+        if metadata_dict['initial_appraisal'] == "Delete content":
             if check_list(deaccession_list, item_barcode):
                 print('\n\t%s has been moved to the "deaccession" folder.' % item_barcode)
             else:
@@ -379,7 +378,6 @@ def main():
         elif initial_appraisal == "Transfer to SDA":
 
             '''CHECK THAT FOLDER EXISTS'''            
-            folders = bdpl_folders(unit_name, shipmentDate, item_barcode)
             
             destination = folders['destination']
             files_dir = folders['files_dir']
@@ -394,10 +392,8 @@ def main():
             #complete initial preparations; skip if we're returning to item
             if not check_list(prep_list, item_barcode):
                 
-                file_count = return_spreadsheet_value(ws_app, current_row, ws_columns['item_file_count'])
-                
                 #doublecheck if no file information has been reported on spreadsheet
-                if file_count is None or file_count == 0:
+                if metadata_dict['item_file_count'] is None or file_count == 0:
                     #check for content in our image_dir and files_dir; if both are empty, fail barcode.
                     if not checkFiles(image_dir) and not checkFiles(files_dir):
                         write_list(failed_list, '%s\tcheck_folder\tNO CONTENT IN BARCODE FOLDER: CHANGE APPRAISAL DECISION?' % item_barcode)
@@ -651,22 +647,12 @@ def main():
             if not check_list(bagged_list, item_barcode):
             
                 print('\n\tCreating bag for barcode folder...')
-                
-                begin_date = return_spreadsheet_value(ws_app, current_row, ws_columns['begin_date'])
-                end_date = return_spreadsheet_value(ws_app, current_row, ws_columns['end_date'])
-                content_source_type = return_spreadsheet_value(ws_app, current_row, ws_columns['content_source_type'])
-                label_transcription = return_spreadsheet_value(ws_app, current_row, ws_columns['label_transcription'])
-                try:
-                    item_title = return_spreadsheet_value(ws_app, current_row, ws_columns['item_title'])
-                except KeyError:
-                    item_title = ''
-                appraisal_notes = return_spreadsheet_value(ws_app, current_row, ws_columns['appraisal_notes'])
-                
-                dates = '%s-%s' % (begin_date, end_date)
+
 
                 
                 #description for bag-info.txt currently includes source media, label transcription, and appraisal note.
-                desc = 'Source: %s. | Label: %s. | Title: %s. | Appraisal notes: %s. | Date range: %s' %(content_source_type, label_transcription, item_title, appraisal_notes, dates)
+                desc = 'Source: %s. | Label: %s. | Title: %s. | Appraisal notes: %s. | Date range: %s-%s' %(metadata_dict['content_source_type'], metadata_dict['label_transcription'], metadata_dict.get(item_title, '-'),  metadata_dict['appraisal_notes'], metadata_dict['begin_date'], metadata_dict['end_date'])
+                
                 desc = desc.replace('\n', ' ')    
         
                 try:
@@ -774,9 +760,7 @@ def main():
                                 continue
                                     
                 #Recalculate size of extracted files
-                extent_raw = return_spreadsheet_value(ws_app, current_row, ws_columns['extent_raw'])
-                
-                if extent_raw is None:
+                if metadata_dict['extent_raw'] is None:
                     extracted_size = get_size(os.path.join(destination, 'data', 'files')) 
                 else:
                     extracted_size = (int(extent_raw) - sep_size)
@@ -785,9 +769,9 @@ def main():
                 ws_app.cell(row=current_row, column=ws_columns['extent_raw'], value=extracted_size)
                 
                 #if there are any files separated, adjust extracted file count
-                extracted_no = int(row[17].value) - sep_files
-                if extracted_no != row[17].value:
-                    ws_app.cell(row=row[0].row, column=18, value=extracted_no)
+                extracted_no = int(metadata_dict['item_file_count']) - sep_files
+                if extracted_no != metadata_dict['item_file_count']:
+                    ws_app.cell(row=current_row, column=ws_columns['item_file_count'], value=extracted_no)
                     
                 wb.save(spreadsheet)
                 
@@ -800,48 +784,36 @@ def main():
                     with open(SIP_stats, 'rb') as file:
                         SIP_dict = pickle.load(file)
                 
+                access_option = '-'
+                
                 try:
-                    if row[28].value is None:
-                        access_option = '-'
-                    else:
-                        access_option = str(row[28].value)
+                    if metadata_dict['jobType'] in ['CDDA', 'DVD']:
+                        access_option = '%s: deposit to MCO' % metadata_dict['jobType']
+
                 except IndexError:
-                    access_option = '-'
+                    pass
                     
                 '''MAYBE CAPTURE THIS INFORMATION AT BEGINNING OF PROCESS SO IT CAN BE USED THROUGHTOUT?'''
-                
-                coll_title = str(row[2].value)
-                coll_id = str(row[3].value)
-                creator = str(row[4].value)
-                source_type = str(row[6].value)
-                label_transcript = str(row[7].value)
-                appraisal_notes = str(row[8].value)
-                restrict_stmt = str(row[9].value)
-                restrict_end_date = str(row[10].value)
-                migration_date = str(row[12].value)
-                sip_creation_date = str(datetime.datetime.now())
-                earliest_date = str(row[21].value) 
-                latest_date = str(row[22].value)
                 
                 #determine appropriate row: overwrite if already existing or add new row, otherwise
                 newrow = return_spreadsheet_row(item_ws, item_barcode)
                 
                 #write information on the specfic barcode
-                item_ws.cell(row=newrow, column=1).value = item_barcode
+                item_ws.cell(row=newrow, column=1).value = metadata_dict['item_barcode']
                 item_ws.cell(row=newrow, column=2).value = unit_name
                 item_ws.cell(row=newrow, column=3).value = shipmentDate
-                item_ws.cell(row=newrow, column=4).value = coll_title
-                item_ws.cell(row=newrow, column=5).value = coll_id
-                item_ws.cell(row=newrow, column=6).value = creator
-                item_ws.cell(row=newrow, column=7).value = source_type
-                item_ws.cell(row=newrow, column=8).value = label_transcript
-                item_ws.cell(row=newrow, column=9).value = appraisal_notes
-                item_ws.cell(row=newrow, column=10).value = earliest_date
-                item_ws.cell(row=newrow, column=11).value = latest_date
-                item_ws.cell(row=newrow, column=12).value = restrict_stmt
-                item_ws.cell(row=newrow, column=13).value = restrict_end_date
-                item_ws.cell(row=newrow, column=14).value = migration_date
-                item_ws.cell(row=newrow, column=15).value = sip_creation_date
+                item_ws.cell(row=newrow, column=4).value = metadata_dict['collection_title']
+                item_ws.cell(row=newrow, column=5).value = metadata_dict['current_coll_id']
+                item_ws.cell(row=newrow, column=6).value = metadata_dict['collection_creator']
+                item_ws.cell(row=newrow, column=7).value = metadata_dict['content_source_type']
+                item_ws.cell(row=newrow, column=8).value = metadata_dict['label_transcription']
+                item_ws.cell(row=newrow, column=9).value = metadata_dict['appraisal_notes']
+                item_ws.cell(row=newrow, column=10).value = metadata_dict['begin_date']
+                item_ws.cell(row=newrow, column=11).value = metadata_dict['end_date']
+                item_ws.cell(row=newrow, column=12).value = metadata_dict['restriction_statement']
+                item_ws.cell(row=newrow, column=13).value = metadata_dict['restriction_end_date']
+                item_ws.cell(row=newrow, column=14).value = metadata_dict['migration_date']
+                item_ws.cell(row=newrow, column=15).value = str(datetime.datetime.now())
                 item_ws.cell(row=newrow, column=16).value = extracted_no
                 item_ws.cell(row=newrow, column=17).value = extracted_size
                 item_ws.cell(row=newrow, column=18).value = SIP_dict['size']
@@ -911,7 +883,7 @@ def main():
                 
                 shutil.move(item_barcode, 'review')
                 
-                print('\n\tAlternate appraisal decision: %s. \n\tConfer with collecting unit as needed.' % str(row[27].value))
+                print('\n\tAlternate appraisal decision: %s. \n\tConfer with collecting unit as needed.' % metadata_dict['initial_appraisal'])
             
             else:
                 print('\n\t%s has been moved to the "Review" folder.' % item_barcode)
