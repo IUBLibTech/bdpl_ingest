@@ -653,6 +653,10 @@ def lsdvd_check(folders, item_barcode, drive_letter):
         if len(count) > 0:
             titlecount = max(set(count))
     
+    #if we haven't identified titles (i.e., we do not have a DVD), delete lsdvd output
+    if titlecount == 0:
+        os.remove(lsdvdout)
+        
     return titlecount
 
 def normalize_dvd_content(folders, item_barcode, titlecount, drive_letter):
