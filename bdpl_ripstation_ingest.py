@@ -125,7 +125,7 @@ def main():
     rs_timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(rs_log)).strftime('%Y-%m-%d')
 
     with open(userdata, 'r') as ud:
-        barcodes = [bc for bc in ud.read().splitlines()]
+        barcodes = ud.read().splitlines()
         
     #loop through all barcodes
     for item_barcode in barcodes:
@@ -260,7 +260,7 @@ def main():
                 
                 #set variables
                 orig_imagefile = os.path.join(image_dir, '%s.iso' % item_barcode)
-                imagefile = 's.dd' % os.path.splitext(orig_imagefile)[0]
+                imagefile = '%s.dd' % os.path.splitext(orig_imagefile)[0]
                 
                 #make sure image file is present
                 if not os.path.exists(orig_imagefile):
