@@ -20,9 +20,9 @@ def main():
             print('\n\tWARNING: %s does not appear to exist... Please re-enter information.' % ship_dir)
             continue
     
-    failed_ingest = os.path.join(ship_dir, 'failed_ingest.txt')
-    replicated = os.path.join(ship_dir, 'replicated.txt')
-    analyzed = os.path.join(ship_dir, 'analyzed.txt')
+    failed_ingest = os.path.join(ship_dir, 'failed_ingest_ripstation.txt')
+    replicated = os.path.join(ship_dir, 'replicated_ripstation.txt')
+    analyzed = os.path.join(ship_dir, 'analyzed_ripstation.txt')
     userdata = os.path.join(ship_dir, 'userdata.txt')
     
     missing = [x for x in [replicated, analyzed, userdata] if not os.path.exists(x)]
