@@ -695,8 +695,15 @@ def normalize_dvd_content(folders, item_barcode, titlecount, drive_letter):
             print('\n\tChecking audio streams...')
             for t in titlelist:
                 cmd = "ffprobe -i %s -hide_banner -show_streams -select_streams a -loglevel error" % t
-                audio_check = subprocess.check_output(cmd, shell=True, text=True)
-                audio_test[t] = audio_check
+                try:
+                    audio_check = subprocess.check_output(cmd, shell=True, text=True)
+                    audio_test[t] = audio_check
+                except subprocess.CalledProcessError:
+                    pass
+            
+            if len(audio_test) == 0:
+                print('\nWARNING: unable to access information on DVD. Moving image normalization has failed...')
+                return
             
             #if there's no audio in any track, it's OK
             if all(value == '' for value in audio_test.values()):

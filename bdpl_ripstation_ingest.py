@@ -238,7 +238,7 @@ def main():
                     with open(wav_cue, 'r') as infile:
                         for line in infile.readlines():
                             if line.startswith('FILE'):
-                                outfile.write('FILE "%s.bin" BINARY' % item_barcode)
+                                outfile.write('FILE "%s.bin" BINARY\n' % item_barcode)
                             elif line.startswith('  TRACK') or line.startswith('    INDEX'):
                                 outfile.write(line)
                 
