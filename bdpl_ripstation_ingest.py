@@ -213,13 +213,13 @@ def main():
                 #now create bin file with raw 16 bit little-endian PCM 
                 cmd = 'ffmpeg -y -i %s -hide_banner -ar %s -ac %s -f s16le -acodec pcm_s16le %s' % (wav_file, sample_rate, channels, cdr_bin)
                 timestamp = str(datetime.datetime.now())
-                exitcode = subprocess.call(cmd, shell=True)
+                exitcode_bin = subprocess.call(cmd, shell=True)
                 
                 ffmpeg_ver = '; '.join(subprocess.check_output('"C:\\Program Files\\ffmpeg\\bin\\ffmpeg" -version', shell=True, text=True).splitlines()[0:2])
 
                 #record premis
                 premis_list = pickleLoad('premis_list', folders, item_barcode)
-                premis_list.append(premis_dict(timestamp, 'normalization', exitcode, cmd, 'Transformed object to an institutionally supported preservation format (.BIN)', ffmpeg_ver))
+                premis_list.append(premis_dict(timestamp, 'normalization', exitcode_bin, cmd, 'Transformed object to an institutionally supported preservation format (.BIN)', ffmpeg_ver))
                 
                 #get path of the original cue file produced by RipStation
                 orig_cue = os.path.join(files_dir, [x for x in os.listdir(files_dir) if os.path.splitext(x)[1] == '.cue'][0])
@@ -255,6 +255,9 @@ def main():
                 #record premis
                 premis_list.append(premis_dict(timestamp, 'metadata modification', exitcode, cmd, "Converted the CD's .CUE file to the table of contents (.TOC) format.", cue2toc_ver))
                 pickleDump('premis_list', premis_list, folders)
+                
+                #if we complete, assume success
+                write_list(replicated, item_barcode)
                
             if rip_option == 'DVD_Data':
                 
@@ -370,8 +373,8 @@ def main():
                     os.rename(orig_imagefile, imagefile)
                 
                 if checkFiles(files_dir):
-                    with open(replicated, 'a') as f:
-                        f.write('%s\n' % item_barcode)
+                    write_list(replicated, item_barcode)
+
                 else:
                     print('\nWARNING: failed to replicate files!  Moving on to next item...')
                     write_list(failed_ingest, '%s\tFailed to replicate files' % item_barcode)
