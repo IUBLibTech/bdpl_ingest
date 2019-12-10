@@ -210,14 +210,6 @@ def main():
                 sample_rate = audio_dict['sample_rate']
                 channels = audio_dict['channels']
                 
-                #move to a temp folder so we can capture log...
-                bdpl_cwd = 'C:\\BDPL\\scripts'
-                ffmpeg_temp = os.path.join(temp_dir, 'ffmpeg')
-                if not os.path.exists(ffmpeg_temp):
-                    os.makedirs(ffmpeg_temp)
-                
-                os.chdir(ffmpeg_temp)
-                
                 #now create bin file with raw 16 bit little-endian PCM 
                 cmd = 'ffmpeg -y -i %s -hide_banner -ar %s -ac %s -f s16le -acodec pcm_s16le %s' % (wav_file, sample_rate, channels, cdr_bin)
                 timestamp = str(datetime.datetime.now())
@@ -228,12 +220,6 @@ def main():
                 #record premis
                 premis_list = pickleLoad('premis_list', folders, item_barcode)
                 premis_list.append(premis_dict(timestamp, 'normalization', exitcode_bin, cmd, 'Transformed object to an institutionally supported preservation format (.BIN)', ffmpeg_ver))
-                
-                #move ffmpeg log
-                ffmpeglog = glob.glob(os.path.join(ffmpeg_temp, 'ffmpeg-*.log'))[0]
-                shutil.move(ffmpeglog, os.path.join(log_dir, '%s-ffmpeg.log' % item_barcode))
-                
-                os.chdir(bdpl_cwd)
                 
                 #get path of the original cue file produced by RipStation
                 orig_cue = os.path.join(files_dir, [x for x in os.listdir(files_dir) if os.path.splitext(x)[1] == '.cue'][0])
