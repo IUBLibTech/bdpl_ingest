@@ -2553,8 +2553,10 @@ def writeSpreadsheet(folders, unit_name, shipmentDate, item_barcode, gui_vars, j
     metadata_dict['transfer_link'] = '=HYPERLINK("{}", "{}")'.format(".\\%s" % item_barcode, "View transfer folder")
     
     try:
-        if metadata_dict['initial_appraisal'] == "No appraisal needed":
+        if metadata_dict['initial_appraisal'] in ["No appraisal needed", "Move to SDA", "Transfer to SDA"]:
             metadata_dict['initial_appraisal'] = "Transfer to SDA"
+        elif metadata_dict['initial_appraisal'] == 'Move to SDA and MCO':
+            metadata_dict['initial_appraisal'] = 'Transfer to SDA and MCO'
         elif metadata_dict['initial_appraisal'] == '-':
             del metadata_dict['initial_appraisal']
     except KeyError:

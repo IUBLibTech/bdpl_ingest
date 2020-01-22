@@ -25,6 +25,32 @@ def convert_size(size):
     s = s.replace('.0', '')
     return '%s %s' % (s,size_name[i])
 
+def categorize_source(source):
+
+    optical = ['cd', 'dvd', 'optical']
+    usb_drives = ['cruzer', 'usb', 'flash']
+    hard_drives = ['passport', 'external', 'hard']
+    other_transfer = ['n/a', 'email', 'cloud', 'tar', 'folder']
+    
+    if source is None:
+        return 'other'
+    elif any(f in source.lower() for f in optical):
+        return 'opticaldisk'
+    elif '3.5' in source:
+        return '3.5"floppy'
+    elif '5.25' in source:
+        return '5.25"floppy'
+    elif 'zip' in source.lower():
+        return 'zipdisk'
+    elif any(f in source.lower() for f in usb_drives):
+        return 'usbdrive'
+    elif any(f in source.lower() for f in hard_drives):
+        return 'externalharddrive'
+    elif any(f in source.lower() for f in other_transfer):
+        return 'other'
+    else:
+        return source.split(' (')[0].lower().replace(' ', '').replace('?', '')
+        
 def main():
     
     '''GET STATS FROM CURRENT SHIPMENTS--CONTENT THAT IS READY FOR INGEST BUT NOT DEPOSITED TO SCANDIUM'''
@@ -45,7 +71,7 @@ def main():
     if os.path.exists(output):
         os.remove(output)
 
-    stats = {'total_size' : 0, 'total_files' : 0, 'total_items' : 0}
+    stats = {'total_size' : 0, 'total_files' : 0, 'total_items' : 0, 'raw_formats' : {}}
     
     with open(output, 'w') as f:
         f.write('BDPL STATISTICS\nPrepared on: %s\n\nCURRENT SHIPMENTS:\n' % datetime.date.today().strftime("%B %d, %Y"))
@@ -97,7 +123,8 @@ def main():
                 if row[ws_columns['migration_outcome']].value == 'Success':
                     temp['item_count'] += 1
                     temp['file_count'] += int(row[ws_columns['item_file_count']].value)
-                    temp['raw_formats'].append(row[ws_columns['content_source_type']].value.split(' (')[0].lower().replace(' ', '').replace('?', ''))
+                    source_type = categorize_source(row[ws_columns['content_source_type']].value)
+                    temp['raw_formats'].append(source_type)
                     temp['size'].append(row[ws_columns['extent_normal']].value)
 
             #tally our sizes
@@ -120,9 +147,6 @@ def main():
             
             temp['size'] = final_size
             
-            format_count = collections.Counter(temp['raw_formats'])
-            temp['final_formats'] = dict(format_count)
-            
             if temp['item_count'] > 0:
                 if not project_added:
                     with open(output, 'a') as f:
@@ -135,8 +159,12 @@ def main():
                     f.write('\t\tFile count: %s\n' % temp['file_count'])
                     f.write('\t\tSize (in bytes): %s (%s)\n' % (temp['size'], convert_size(temp['size'])))
                     f.write('\t\tSource formats:\n')
-                    for key, value in temp['final_formats'].items():
+                    for key, value in collections.Counter(temp['raw_formats'].items():
                         f.write('\t\t\t%s: %s\n' % (key, value))
+                        if key in stats['raw_formats']:
+                            stats['raw_formats'][key] += value
+                        else:
+                            stats['raw_formats'][key] = value
                   
             stats[project].append(temp)
             
@@ -172,6 +200,9 @@ def main():
         f.write('\tItems: %s\n' % stats['total_items'])
         f.write('\tFiles: %s\n' % stats['total_files'])
         f.write('\tSize: %s (%s)\n' % (stats['total_size'], convert_size(stats['total_size'])))
+        f.write('\tTotal format tallies:\n')
+        for key, value in stats['raw_formats'].items():
+            f.write('\t\t%s: %s\n' % (key, value))
     
     '''NEXT, GET STATS ON CONTENT DEPOSITED TO SDA'''
     print('\nCollecting statistics for content deposited to SDA...')
@@ -220,14 +251,18 @@ def main():
         stats_items = {}
         by_year = {}
         for row in iterrows2:
+            
             unit = row[1].value
             year = str(row[14].value)[:4]
             
+            source_type = categorize_source(row[6].value)
+            
             if year not in by_year.keys():
-                by_year[year] = [[int(row[17].value)], [1]]
+                by_year[year] = [[int(row[17].value)], [1], [source_type]]
             else:
                 by_year[year][0].append(int(row[17].value))
                 by_year[year][1].append(1)
+                by_year[year][2].append(source_type)
             
             if not unit in stats_items.keys():
                 stats_items[unit] = {year : {'items' : 1, 'size' : int(row[17].value)}}
@@ -247,11 +282,15 @@ def main():
                 f.write('\t%s\n\t\tNumber of items: %s\n\t\tOverall size: %s\n' % (year, info['items'], sized))
             
             f.write('\tTOTAL:\n\t\tNumber of items: %s\n\t\tOverall size: %s\n' % (unit_totals[unit]['items'], unit_totals[unit]['size']))
-
+            
         f.write('\n\n')
         
         for key, values in sorted(by_year.items()):
             f.write('%s : %s (%s items)\n' % (key, convert_size(sum(values[0])), sum(values[1])))
+            f.write('\n\t SOURCE TYPES:\n')
+            for k, v in collections.Counter(by_year[key][2]).items():
+                f.write('\t\t%s : %s\n' % (k, v))
+            f.write('\n\n')
         
     print('\nText file with these statistics located at: %s' % output)
     
