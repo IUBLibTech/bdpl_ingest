@@ -788,11 +788,12 @@ def cdda_image_creation(folders, item_barcode, sourceDevice):
     for x in range(1, (sessions+1)):
         cdr_bin = os.path.join(image_dir, "%s-%s.bin") % (item_barcode, str(x).zfill(2))
         cdr_toc = os.path.join(image_dir, "%s-%s.toc") % (item_barcode, str(x).zfill(2))
+        cdr_log = os.path.join(image_dir, "%s-%s.log") % (item_barcode, str(x).zfill(2))
         
         print('\n\tGenerating session %s of %s: %s\n\n' % (str(x), str(sessions), cdr_bin))
         
         #create separate bin/cue for each session
-        cdr_cmd = 'cdrdao read-cd --read-raw --session %s --datafile %s --device %s --driver generic-mmc-raw -v 1 %s' % (str(x), cdr_bin, drive_id, cdr_toc)
+        cdr_cmd = 'cdrdao read-cd --read-raw --session %s --datafile %s --device %s --driver generic-mmc-raw -v 3 %s | tee -a %s' % (str(x), cdr_bin, drive_id, cdr_toc, cdr_log)
         
         timestamp = str(datetime.datetime.now())
         
@@ -1135,7 +1136,7 @@ def import_csv(folders):
     cursor.close()
     conn.close()
 
-def generate_reports(cursor, html, folders, re_analyze, item_barcode):
+def generate_reports(cursor, html_doc, folders, re_analyze, item_barcode):
     temp_dir = folders['temp_dir']
     reports_dir = folders['reports_dir']
     bulkext_dir = folders['bulkext_dir']
@@ -1153,7 +1154,7 @@ def generate_reports(cursor, html, folders, re_analyze, item_barcode):
         sql = "SELECT format, id, COUNT(*) as 'num' FROM siegfried GROUP BY format ORDER BY num DESC"
         format_header = ['Format', 'ID', 'Count']
         sqlite_to_csv(sql, path, format_header, cursor)
-    write_html('File formats', path, ',', html, folders, item_barcode)
+    write_html('File formats', path, ',', html_doc, folders, item_barcode)
 
     # sorted format and version list report
     path = os.path.join(reports_dir, 'formatVersions.csv')
@@ -1161,7 +1162,7 @@ def generate_reports(cursor, html, folders, re_analyze, item_barcode):
         sql = "SELECT format, id, version, COUNT(*) as 'num' FROM siegfried GROUP BY format, version ORDER BY num DESC"
         version_header = ['Format', 'ID', 'Version', 'Count']
         sqlite_to_csv(sql, path, version_header, cursor)
-    write_html('File format versions', path, ',', html, folders, item_barcode)
+    write_html('File format versions', path, ',', html_doc, folders, item_barcode)
 
     # sorted mimetype list report
     path = os.path.join(reports_dir, 'mimetypes.csv')
@@ -1169,34 +1170,34 @@ def generate_reports(cursor, html, folders, re_analyze, item_barcode):
         sql = "SELECT mime, COUNT(*) as 'num' FROM siegfried GROUP BY mime ORDER BY num DESC"
         mime_header = ['MIME type', 'Count']
         sqlite_to_csv(sql, path, mime_header, cursor)
-    write_html('MIME types', path, ',', html, folders, item_barcode)
+    write_html('MIME types', path, ',', html_doc, folders, item_barcode)
 
     # dates report
     path = os.path.join(reports_dir, 'years.csv')
-    write_html('Last modified dates by year', path, ',', html, folders, item_barcode)
+    write_html('Last modified dates by year', path, ',', html_doc, folders, item_barcode)
     
     # unidentified files report
     path = os.path.join(reports_dir, 'unidentified.csv')
     if not os.path.exists(path) or re_analyze:
         sql = "SELECT * FROM siegfried WHERE id='UNKNOWN';"
         sqlite_to_csv(sql, path, full_header, cursor)
-    write_html('Unidentified', path, ',', html, folders, item_barcode)
+    write_html('Unidentified', path, ',', html_doc, folders, item_barcode)
     
     # errors report
     path = os.path.join(reports_dir, 'errors.csv')
     if not os.path.exists(path) or re_analyze:
         sql = "SELECT * FROM siegfried WHERE errors <> '';"
         sqlite_to_csv(sql, path, full_header, cursor)
-    write_html('Errors', path, ',', html, folders, item_barcode)
+    write_html('Errors', path, ',', html_doc, folders, item_barcode)
     
     # duplicates report: retrieve our 'duplicates' file instead of CSV
     dup_list = pickleLoad('duplicates', folders, item_barcode)
-    write_html('Duplicates', dup_list, ',', html, folders, item_barcode)
+    write_html('Duplicates', dup_list, ',', html_doc, folders, item_barcode)
     
     #PII report: 
     cumulative_report = os.path.join(bulkext_dir, 'cumulative.txt')
     if os.path.exists(cumulative_report):
-        write_html('Personally Identifiable Information (PII)', cumulative_report, '\n', html, folders, item_barcode)
+        write_html('Personally Identifiable Information (PII)', cumulative_report, '\n', html_doc, folders, item_barcode)
     
     
 def sqlite_to_csv(sql, path, header, cursor):
@@ -1233,16 +1234,16 @@ def write_pronom_links(old_file, new_file):
     in_file.close()
     out_file.close()
 
-def write_html(header, path, file_delimiter, html, folders, item_barcode):
+def write_html(header, path, file_delimiter, html_doc, folders, item_barcode):
     """Write csv file to html table"""
     reports_dir = folders['reports_dir']
 
     # write header
-    html.write('\n<a name="%s" style="padding-top: 40px;"></a>' % header)
-    html.write('\n<h4>%s</h4>' % header)
+    html_doc.write('\n<a name="%s" style="padding-top: 40px;"></a>' % header)
+    html_doc.write('\n<h4>%s</h4>' % header)
     
     if header == 'Duplicates':
-        html.write('\n<p><em>Duplicates are grouped by hash value.</em></p>')
+        html_doc.write('\n<p><em>Duplicates are grouped by hash value.</em></p>')
         
         dup_list = path
         
@@ -1257,25 +1258,25 @@ def write_html(header, path, file_delimiter, html, folders, item_barcode):
             hash_list = list(OrderedDict.fromkeys(hash_list))
             # for each hash in md5_list, print header, file info, and list of matching files
             for hash_value in hash_list:
-                html.write('\n<p>Files matching checksum <strong>%s</strong>:</p>' % hash_value)
-                html.write('\n<table class="table table-sm table-responsive table-bordered table-hover">')
-                html.write('\n<thead>')
-                html.write('\n<tr>')
-                html.write('\n<th>Filename</th><th>Filesize</th>')
-                html.write('<th>Date modified</th>')
-                html.write('<th>Checksum</th>')
-                html.write('\n</tr>')
-                html.write('\n</thead>')
-                html.write('\n<tbody>')
+                html_doc.write('\n<p>Files matching checksum <strong>%s</strong>:</p>' % hash_value)
+                html_doc.write('\n<table class="table table-sm table-responsive table-bordered table-hover">')
+                html_doc.write('\n<thead>')
+                html_doc.write('\n<tr>')
+                html_doc.write('\n<th>Filename</th><th>Filesize</th>')
+                html_doc.write('<th>Date modified</th>')
+                html_doc.write('<th>Checksum</th>')
+                html_doc.write('\n</tr>')
+                html_doc.write('\n</thead>')
+                html_doc.write('\n<tbody>')
                 for row in dup_list:
                     if row[3] == '%s' % hash_value:
                         # write data
-                        html.write('\n<tr>')
+                        html_doc.write('\n<tr>')
                         for column in row:
-                            html.write('\n<td>' + str(column) + '</td>')
-                        html.write('\n</tr>')
-                html.write('\n</tbody>')
-                html.write('\n</table>')
+                            html_doc.write('\n<td>' + str(column) + '</td>')
+                        html_doc.write('\n</tr>')
+                html_doc.write('\n</tbody>')
+                html_doc.write('\n</table>')
         
             #save a copy of the duplicates for the reports
             dup_report = os.path.join(reports_dir, 'duplicates.csv')
@@ -1286,7 +1287,7 @@ def write_html(header, path, file_delimiter, html, folders, item_barcode):
                 for item in dup_list:
                     writer.writerow(item)
         else:
-            html.write('\nNone found.\n<br><br>')
+            html_doc.write('\nNone found.\n<br><br>')
         
     else:
         in_file = open(path, 'r', encoding="utf-8")
@@ -1299,7 +1300,7 @@ def write_html(header, path, file_delimiter, html, folders, item_barcode):
         
         # if writing PII, handle separately
         if header == 'Personally Identifiable Information (PII)':
-            html.write('\n<p><em>Potential PII in source, as identified by bulk_extractor.</em></p>')
+            html_doc.write('\n<p><em>Potential PII in source, as identified by bulk_extractor.</em></p>')
             
             pii_list = []
         
@@ -1307,47 +1308,47 @@ def write_html(header, path, file_delimiter, html, folders, item_barcode):
             
             #check that there are any PII results
             if os.stat(path).st_size > 0:
-                html.write('\n<table class="table table-sm table-responsive table-hover">')
-                html.write('\n<thead>')
-                html.write('\n<tr>')
-                html.write('\n<th>PII type</th>')
-                html.write('\n<th># of matches (may be false)</th>')
-                html.write('\n<th>More information (if available)</th>')
-                html.write('\n</tr>')
-                html.write('\n</thead>')
-                html.write('\n<tbody>')
+                html_doc.write('\n<table class="table table-sm table-responsive table-hover">')
+                html_doc.write('\n<thead>')
+                html_doc.write('\n<tr>')
+                html_doc.write('\n<th>PII type</th>')
+                html_doc.write('\n<th># of matches (may be false)</th>')
+                html_doc.write('\n<th>More information (if available)</th>')
+                html_doc.write('\n</tr>')
+                html_doc.write('\n</thead>')
+                html_doc.write('\n<tbody>')
                 with open(path, 'r') as pii_info:
                     for line in pii_info:
-                        html.write('\n<tr>')
+                        html_doc.write('\n<tr>')
                         if 'pii.txt' in line:
                             # write data
-                            html.write('\n<td>SSNs, Account Nos., Birth Dates, etc.</td>')
-                            html.write('\n<td>' + line.split()[1] + '</td>')
-                            html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % folders['bulkext_dir'])
+                            html_doc.write('\n<td>SSNs, Account Nos., Birth Dates, etc.</td>')
+                            html_doc.write('\n<td>' + line.split()[1] + '</td>')
+                            html_doc.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % folders['bulkext_dir'])
                             pii_list.append('ACCOUNT NOs')
                         if 'ccn.txt' in line:
-                            html.write('\n<td>Credit Card Nos.</td>')
-                            html.write('\n<td>' + line.split()[1] + '</td>')
-                            html.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % folders['bulkext_dir'])
+                            html_doc.write('\n<td>Credit Card Nos.</td>')
+                            html_doc.write('\n<td>' + line.split()[1] + '</td>')
+                            html_doc.write('\n<td>Use BE_Viewer to verify results; report.xml file located at: %s.</td>' % folders['bulkext_dir'])
                             pii_list.append('CCNs')
                         if 'email.txt' in line:
-                            html.write('\n<td>Email address domains (may include 3rd party information)</td>')
-                            html.write('\n<td>' + line.split()[1] + '</td>')
-                            html.write('\n<td>See: <a href="./email_domain_histogram.txt">Email domain histogram</a></td>')
+                            html_doc.write('\n<td>Email address domains (may include 3rd party information)</td>')
+                            html_doc.write('\n<td>' + line.split()[1] + '</td>')
+                            html_doc.write('\n<td>See: <a href="./email_domain_histogram.txt">Email domain histogram</a></td>')
                             pii_list.append('EMAIL')
                         if 'telephone.txt' in line:
-                            html.write('\n<td>Telephone numbers (may include 3rd party information)</td>')
-                            html.write('\n<td>' + line.split()[1] + '</td>')
-                            html.write('\n<td>See: <a href="./telephone_histogram.txt">Telephone # histogram</a></td>')
+                            html_doc.write('\n<td>Telephone numbers (may include 3rd party information)</td>')
+                            html_doc.write('\n<td>' + line.split()[1] + '</td>')
+                            html_doc.write('\n<td>See: <a href="./telephone_histogram.txt">Telephone # histogram</a></td>')
                             pii_list.append('TELEPHONE NOs')
                         if 'find.txt' in line:
-                            html.write('\n<td>Sensitive terms and phrases</td>')
-                            html.write('\n<td>' + line.split()[1] + '</td>')
-                            html.write('\n<td>See: <a href="./find_histogram.txt">Keyword histogram</a></td>')
+                            html_doc.write('\n<td>Sensitive terms and phrases</td>')
+                            html_doc.write('\n<td>' + line.split()[1] + '</td>')
+                            html_doc.write('\n<td>See: <a href="./find_histogram.txt">Keyword histogram</a></td>')
                             pii_list.append('TERMS')
-                        html.write('\n</tr>')   
-                html.write('\n</tbody>')
-                html.write('\n</table>')
+                        html_doc.write('\n</tr>')   
+                html_doc.write('\n</tbody>')
+                html_doc.write('\n</table>')
                 
                 if len(pii_list) > 0:
                     metadata_dict['pii_scan_results'] = '%s.' % ', '.join(pii_list)
@@ -1355,7 +1356,7 @@ def write_html(header, path, file_delimiter, html, folders, item_barcode):
                     metadata_dict['pii_scan_results'] = '-'
         
             else:
-                html.write('\nNone found.')
+                html_doc.write('\nNone found.')
                 metadata_dict['pii_scan_results'] = '-'
             
             pickleDump('metadata_dict', metadata_dict, folders)
@@ -1366,29 +1367,29 @@ def write_html(header, path, file_delimiter, html, folders, item_barcode):
                 # add borders to table for full-width tables only
                 full_width_table_headers = ['Unidentified', 'Errors']
                 if header in full_width_table_headers:
-                    html.write('\n<table class="table table-sm table-responsive table-bordered table-hover">')
+                    html_doc.write('\n<table class="table table-sm table-responsive table-bordered table-hover">')
                 else:
-                    html.write('\n<table class="table table-sm table-responsive table-hover">')
+                    html_doc.write('\n<table class="table table-sm table-responsive table-hover">')
                 # write header row
-                html.write('\n<thead>')
-                html.write('\n<tr>')
+                html_doc.write('\n<thead>')
+                html_doc.write('\n<tr>')
                 row1 = next(r)
                 for column in row1:
-                    html.write('\n<th>' + str(column) + '</th>')
-                html.write('\n</tr>')
-                html.write('\n</thead>')
+                    html_doc.write('\n<th>' + str(column) + '</th>')
+                html_doc.write('\n</tr>')
+                html_doc.write('\n</thead>')
                 # write data rows
-                html.write('\n<tbody>')
+                html_doc.write('\n<tbody>')
                 for row in r:
                     # write data
-                    html.write('\n<tr>')
+                    html_doc.write('\n<tr>')
                     for column in row:
-                        html.write('\n<td>' + str(column) + '</td>')
-                    html.write('\n</tr>')
-                html.write('\n</tbody>')
-                html.write('\n</table>')
+                        html_doc.write('\n<td>' + str(column) + '</td>')
+                    html_doc.write('\n</tr>')
+                html_doc.write('\n</tbody>')
+                html_doc.write('\n</table>')
             else:
-                html.write('\nNone found.\n<br><br>')
+                html_doc.write('\nNone found.\n<br><br>')
     
         in_file.close()
     
@@ -1404,26 +1405,26 @@ def convert_size(size):
     s = s.replace('.0', '')
     return '%s %s' % (s,size_name[i])
     
-def close_html(html):
-    """Add JavaScript and write html closing tags"""
-    html.write('\n</div>')
-    html.write('\n</div>')
-    html.write('\n</div>')
-    html.write('\n</div>')
-    html.write('\n<script src="./assets//js/jquery-3.3.1.slim.min.js"></script>')
-    html.write('\n<script src="./assets//js/popper.min.js"></script>')
-    html.write('\n<script src="./assets//js/bootstrap.min.js"></script>')
-    html.write('\n<script>$(".navbar-nav .nav-link").on("click", function(){ $(".navbar-nav").find(".active").removeClass("active"); $(this).addClass("active"); });</script>')
-    html.write('\n<script>$(".navbar-brand").on("click", function(){ $(".navbar-nav").find(".active").removeClass("active"); });</script>')
-    html.write('\n</body>')
-    html.write('\n</html>')
+def close_html(html_doc):
+    """Add JavaScript and write html_doc closing tags"""
+    html_doc.write('\n</div>')
+    html_doc.write('\n</div>')
+    html_doc.write('\n</div>')
+    html_doc.write('\n</div>')
+    html_doc.write('\n<script src="./assets//js/jquery-3.3.1.slim.min.js"></script>')
+    html_doc.write('\n<script src="./assets//js/popper.min.js"></script>')
+    html_doc.write('\n<script src="./assets//js/bootstrap.min.js"></script>')
+    html_doc.write('\n<script>$(".navbar-nav .nav-link").on("click", function(){ $(".navbar-nav").find(".active").removeClass("active"); $(this).addClass("active"); });</script>')
+    html_doc.write('\n<script>$(".navbar-brand").on("click", function(){ $(".navbar-nav").find(".active").removeClass("active"); });</script>')
+    html_doc.write('\n</body>')
+    html_doc.write('\n</html>')
 
-def close_files_conns_on_exit(html, conn, cursor):
+def close_files_conns_on_exit(html_doc, conn, cursor):
     cursor.close()
     conn.close()
-    html.close()
+    html_doc.close()
 
-def get_stats(folders, cursor, html, item_barcode, re_analyze, jobType):
+def get_stats(folders, cursor, html_doc, item_barcode, re_analyze, jobType):
     """Get aggregate statistics and write to html report"""
     temp_dir = folders['temp_dir']
     files_dir = folders['files_dir']
@@ -1585,89 +1586,95 @@ def get_stats(folders, cursor, html, item_barcode, re_analyze, jobType):
     size = convert_size(size_bytes)
     
     # write html
-    html.write('<!DOCTYPE html>')
-    html.write('\n<html lang="en">')
-    html.write('\n<head>')
-    html.write('\n<title>IUL Born Digital Preservation Lab report: %s</title>' % item_barcode)
-    html.write('\n<meta http-equiv="Content-Type" content="text/html; charset=utf-8">')
-    html.write('\n<meta name="description" content="HTML report based upon a template developed by Tim Walsh and distributed as part of Brunnhilde v. 1.7.2">')
-    html.write('\n<link rel="stylesheet" href="./assets//css/bootstrap.min.css">')
-    html.write('\n</head>')
-    html.write('\n<body style="padding-top: 80px">')
+    html_doc.write('<!DOCTYPE html>')
+    html_doc.write('\n<html lang="en">')
+    html_doc.write('\n<head>')
+    html_doc.write('\n<title>IUL Born Digital Preservation Lab report: %s</title>' % item_barcode)
+    html_doc.write('\n<meta http-equiv="Content-Type" content="text/html; charset=utf-8">')
+    html_doc.write('\n<meta name="description" content="HTML report based upon a template developed by Tim Walsh and distributed as part of Brunnhilde v. 1.7.2">')
+    html_doc.write('\n<link rel="stylesheet" href="./assets//css/bootstrap.min.css">')
+    html_doc.write('\n</head>')
+    html_doc.write('\n<body style="padding-top: 80px">')
     # navbar
-    html.write('\n<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">')
-    html.write('\n<a class="navbar-brand" href="#">Brunnhilde</a>')
-    html.write('\n<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">')
-    html.write('\n<span class="navbar-toggler-icon"></span>')
-    html.write('\n</button>')
-    html.write('\n<div class="collapse navbar-collapse" id="navbarNavAltMarkup">')
-    html.write('\n<div class="navbar-nav">')
-    html.write('\n<a class="nav-item nav-link" href="#Provenance">Provenance</a>')
-    html.write('\n<a class="nav-item nav-link" href="#Stats">Statistics</a>')
-    html.write('\n<a class="nav-item nav-link" href="#File formats">File formats</a>')
-    html.write('\n<a class="nav-item nav-link" href="#File format versions">Versions</a>')
-    html.write('\n<a class="nav-item nav-link" href="#MIME types">MIME types</a>')
-    html.write('\n<a class="nav-item nav-link" href="#Last modified dates by year">Dates</a>')
-    html.write('\n<a class="nav-item nav-link" href="#Unidentified">Unidentified</a>')
-    html.write('\n<a class="nav-item nav-link" href="#Errors">Errors</a>')
-    html.write('\n<a class="nav-item nav-link" href="#Duplicates">Duplicates</a>')
-    html.write('\n<a class="nav-item nav-link" href="#Personally Identifiable Information (PII)">PII</a>')
-    html.write('\n</div>')
-    html.write('\n</div>')
-    html.write('\n</nav>')
+    html_doc.write('\n<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">')
+    html_doc.write('\n<a class="navbar-brand" href="#">Brunnhilde</a>')
+    html_doc.write('\n<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">')
+    html_doc.write('\n<span class="navbar-toggler-icon"></span>')
+    html_doc.write('\n</button>')
+    html_doc.write('\n<div class="collapse navbar-collapse" id="navbarNavAltMarkup">')
+    html_doc.write('\n<div class="navbar-nav">')
+    html_doc.write('\n<a class="nav-item nav-link" href="#Provenance">Provenance</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#Stats">Statistics</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#File formats">File formats</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#File format versions">Versions</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#MIME types">MIME types</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#Last modified dates by year">Dates</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#Unidentified">Unidentified</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#Errors">Errors</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#Duplicates">Duplicates</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#Personally Identifiable Information (PII)">PII</a>')
+    html_doc.write('\n<a class="nav-item nav-link" href="#Named Entities">Named Entities</a>')
+    html_doc.write('\n</div>')
+    html_doc.write('\n</div>')
+    html_doc.write('\n</nav>')
     # content
-    html.write('\n<div class="container-fluid">')
-    html.write('\n<h1 style="text-align: center; margin-bottom: 40px;">Brunnhilde HTML report</h1>')
+    html_doc.write('\n<div class="container-fluid">')
+    html_doc.write('\n<h1 style="text-align: center; margin-bottom: 40px;">IUL BDPL Brunnhilde HTML report</h1>')
     # provenance
-    html.write('\n<a name="Provenance" style="padding-top: 40px;"></a>')
-    html.write('\n<div class="container-fluid" style="margin-bottom: 40px;">')
-    html.write('\n<div class="card">')
-    html.write('\n<h2 class="card-header">Provenance</h2>')
-    html.write('\n<div class="card-body">')
+    html_doc.write('\n<a name="Provenance" style="padding-top: 40px;"></a>')
+    html_doc.write('\n<div class="container-fluid" style="margin-bottom: 40px;">')
+    html_doc.write('\n<div class="card">')
+    html_doc.write('\n<h2 class="card-header">Provenance</h2>')
+    html_doc.write('\n<div class="card-body">')
     '''need to check if disk image or not'''
     if jobType == 'Copy_only':
-        html.write('\n<p><strong>Input source: File directory</strong></p>')
-    else:
-        html.write('\n<p><strong>Input source: Physical media</strong></p>')
-    html.write('\n<p><strong>Accession/identifier:</strong> %s</p>' % item_barcode)
-    html.write('\n</div>')
-    html.write('\n</div>')
-    html.write('\n</div>')
+        html_doc.write('\n<p><strong>Input source: File directory</strong></p>')
+    elif jobType == 'DVD':
+        html_doc.write('\n<p><strong>Input source: DVD-Video (optical disc)</strong></p>')
+    elif jobType == 'CDDA':
+        html_doc.write('\n<p><strong>Input source: Compact Disc Digital Audio</strong></p>')
+    elif jobType == 'Disk_image':
+        html_doc.write('\n<p><strong>Input source: Physical media</strong></p>')
+        
+    html_doc.write('\n<p><strong>Item identifier:</strong> %s</p>' % item_barcode)
+    html_doc.write('\n</div>')
+    html_doc.write('\n</div>')
+    html_doc.write('\n</div>')
     # statistics
-    html.write('\n<a name="Stats" style="padding-top: 40px;"></a>')
-    html.write('\n<div class="container-fluid" style="margin-bottom: 40px;">')
-    html.write('\n<div class="card">')
-    html.write('\n<h2 class="card-header">Statistics</h2>')
-    html.write('\n<div class="card-body">')
-    html.write('\n<h4>Overview</h4>')
-    html.write('\n<p><strong>Total files:</strong> %s (includes contents of archive files)</p>' % num_files)
-    html.write('\n<p><strong>Total size:</strong> %s</p>' % size)
-    html.write('\n<p><strong>Years (last modified):</strong> %s - %s</p>' % (begin_date, end_date))
-    html.write('\n<p><strong>Earliest date:</strong> %s</p>' % earliest_date)
-    html.write('\n<p><strong>Latest date:</strong> %s</p>' % latest_date)
-    html.write('\n<h4>File counts and contents</h4>')
-    html.write('\n<p><em>Calculated by hash value. Empty files are not counted in first three categories. Total files = distinct + duplicate + empty files.</em></p>')
-    html.write('\n<p><strong>Distinct files:</strong> %s</p>' % distinct_files)
-    html.write('\n<p><strong>Distinct files with duplicates:</strong> %s</p>' % distinct_dupes)
-    html.write('\n<p><strong>Duplicate files:</strong> %s</p>' % duplicate_copies)
-    html.write('\n<p><strong>Empty files:</strong> %s</p>' % empty_files)
-    html.write('\n<h4>Format identification</h4>')
-    html.write('\n<p><strong>Identified file formats:</strong> %s</p>' % num_formats)
-    html.write('\n<p><strong>Unidentified files:</strong> %s</p>' % unidentified_files)
-    html.write('\n<h4>Errors</h4>')
-    html.write('\n<p><strong>Siegfried errors:</strong> %s</p>' % num_errors)
-    html.write('\n<h2>Virus scan report</h2>')
+    html_doc.write('\n<a name="Stats" style="padding-top: 40px;"></a>')
+    html_doc.write('\n<div class="container-fluid" style="margin-bottom: 40px;">')
+    html_doc.write('\n<div class="card">')
+    html_doc.write('\n<h2 class="card-header">Statistics</h2>')
+    html_doc.write('\n<div class="card-body">')
+    html_doc.write('\n<h4>Overview</h4>')
+    html_doc.write('\n<p><strong>Total files:</strong> %s (includes contents of archive files)</p>' % num_files)
+    html_doc.write('\n<p><strong>Total size:</strong> %s</p>' % size)
+    html_doc.write('\n<p><strong>Years (last modified):</strong> %s - %s</p>' % (begin_date, end_date))
+    html_doc.write('\n<p><strong>Earliest date:</strong> %s</p>' % earliest_date)
+    html_doc.write('\n<p><strong>Latest date:</strong> %s</p>' % latest_date)
+    html_doc.write('\n<h4>File counts and contents</h4>')
+    html_doc.write('\n<p><em>Calculated by hash value. Empty files are not counted in first three categories. Total files = distinct + duplicate + empty files.</em></p>')
+    html_doc.write('\n<p><strong>Distinct files:</strong> %s</p>' % distinct_files)
+    html_doc.write('\n<p><strong>Distinct files with duplicates:</strong> %s</p>' % distinct_dupes)
+    html_doc.write('\n<p><strong>Duplicate files:</strong> %s</p>' % duplicate_copies)
+    html_doc.write('\n<p><strong>Empty files:</strong> %s</p>' % empty_files)
+    html_doc.write('\n<h4>Format identification</h4>')
+    html_doc.write('\n<p><strong>Identified file formats:</strong> %s</p>' % num_formats)
+    html_doc.write('\n<p><strong>Unidentified files:</strong> %s</p>' % unidentified_files)
+    html_doc.write('\n<h4>Errors</h4>')
+    html_doc.write('\n<p><strong>Siegfried errors:</strong> %s</p>' % num_errors)
+    html_doc.write('\n<h2>Virus scan report</h2>')
     with open(os.path.join(log_dir, 'viruscheck-log.txt'), 'r', encoding='utf-8') as f:
         virus_report = f.read()
-    html.write('\n<p>%s</p>' % virus_report)
-    html.write('\n</div>')
-    html.write('\n</div>')
-    html.write('\n</div>')
+    html_doc.write('\n<p>%s</p>' % virus_report)
+    html_doc.write('\n</div>')
+    html_doc.write('\n</div>')
+    html_doc.write('\n</div>')
     # detailed reports
-    html.write('\n<div class="container-fluid" style="margin-bottom: 40px;">')
-    html.write('\n<div class="card">')
-    html.write('\n<h2 class="card-header">Detailed reports</h2>')
-    html.write('\n<div class="card-body">')
+    html_doc.write('\n<div class="container-fluid" style="margin-bottom: 40px;">')
+    html_doc.write('\n<div class="card">')
+    html_doc.write('\n<h2 class="card-header">Detailed reports</h2>')
+    html_doc.write('\n<div class="card-body">')
     
     #save information to metadata_dict
     metadata_dict = pickleLoad('metadata_dict', folders, item_barcode)
@@ -2239,7 +2246,7 @@ def stats_and_report_creation(folders, item_barcode, re_analyze, jobType):
     
     #set up html for report
     temp_html = os.path.join(temp_dir, 'temp.html')
-    html = open(temp_html, 'w', encoding='utf8')
+    html_doc = open(temp_html, 'w', encoding='utf8')
     
     #prepare sqlite database and variables
     siegfried_db = os.path.join(temp_dir, 'siegfried.sqlite')
@@ -2247,9 +2254,9 @@ def stats_and_report_creation(folders, item_barcode, re_analyze, jobType):
     conn.text_factory = str  # allows utf-8 data to be stored
     cursor = conn.cursor() 
     
-    get_stats(folders, cursor, html, item_barcode, re_analyze, jobType) # get aggregate stats and write to html file
-    generate_reports(cursor, html, folders, re_analyze, item_barcode) # run sql queries, print to html and csv
-    close_html(html) # close HTML file tags
+    get_stats(folders, cursor, html_doc, item_barcode, re_analyze, jobType) # get aggregate stats and write to html file
+    generate_reports(cursor, html_doc, folders, re_analyze, item_barcode) # run sql queries, print to html and csv
+    close_html(html_doc) # close HTML file tags
     
     # close database connections
     cursor.close()
@@ -2258,7 +2265,7 @@ def stats_and_report_creation(folders, item_barcode, re_analyze, jobType):
     print('\n\tFormat analysis completed!')
     
     # close HTML file
-    html.close()
+    html_doc.close()
 
     # write new html file, with hrefs for PRONOM IDs   
     new_html = os.path.join(reports_dir, 'report.html')
@@ -2631,7 +2638,7 @@ def cleanUp(cleanUp_vars):
 def closeUp(window):    
     
     try:
-        close_files_conns_on_exit(html, conn, cursor)
+        close_files_conns_on_exit(html_doc, conn, cursor)
     except (NameError, sqlite3.ProgrammingError) as e:
         pass
     

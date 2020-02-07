@@ -134,7 +134,7 @@ def main():
     
     '''SET VARIABLES'''
     #Identify where files will be moved ###### UPDATE TO ARCHIVER location #######
-    archiver_home = 'C:/BDPL'
+    archiver_home = 'W:'
     archiver_drop_off = os.path.join(archiver_home, 'Archiver_spool', 'general%2fmediaimages')
     
     if not os.path.exists(archiver_drop_off):
