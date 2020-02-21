@@ -159,7 +159,7 @@ def main():
                     f.write('\t\tFile count: %s\n' % temp['file_count'])
                     f.write('\t\tSize (in bytes): %s (%s)\n' % (temp['size'], convert_size(temp['size'])))
                     f.write('\t\tSource formats:\n')
-                    for key, value in collections.Counter(temp['raw_formats'].items():
+                    for key, value in dict(collections.Counter(temp['raw_formats'])).items():
                         f.write('\t\t\t%s: %s\n' % (key, value))
                         if key in stats['raw_formats']:
                             stats['raw_formats'][key] += value

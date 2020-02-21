@@ -36,12 +36,12 @@ def main():
             print('\nShipment folder not recognized; enclose in quotes and use "/".\n')
             continue
         
-        report_dir = os.path.join(shipment, 'reports')
+        bag_reports = os.path.join(shipment, 'bag_reports')
         
-        failed_list = os.path.join(report_dir, 'failed-packaging.txt')
-        bagged_list = os.path.join(report_dir, 'bagged.txt')
-        deaccession_list = os.path.join(report_dir, 'deaccession.txt')
-        cleaned_list = os.path.join(report_dir, 'cleaned.txt')
+        failed_list = os.path.join(bag_reports, 'failed-packaging.txt')
+        bagged_list = os.path.join(bag_reports, 'bagged.txt')
+        deaccession_list = os.path.join(bag_reports, 'deaccession.txt')
+        cleaned_list = os.path.join(bag_reports, 'cleaned.txt')
         
         if os.path.exists(failed_list):
             break
@@ -59,7 +59,7 @@ def main():
             #make sure we're dealing with a bagit issue
             if line.split()[1] == 'bagit':            
             
-                bag_info = os.path.join(report_dir, '%s-bag-info.txt' % barcode)
+                bag_info = os.path.join(bag_reports, '%s-bag-info.txt' % barcode)
                 
                 info = {}
                 if os.path.exists(bag_info):

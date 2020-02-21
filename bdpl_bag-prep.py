@@ -11,6 +11,7 @@ import glob
 import csv
 from lxml import etree
 import uuid
+import tarfile
 
 from bdpl_ingest import *
 from bdpl_ripstation_ingest import *
@@ -134,7 +135,7 @@ def main():
     
     '''SET VARIABLES'''
     #Identify where files will be moved ###### UPDATE TO ARCHIVER location #######
-    archiver_home = 'W:'
+    archiver_home = 'W:\\'
     archiver_drop_off = os.path.join(archiver_home, 'Archiver_spool', 'general%2fmediaimages')
     
     if not os.path.exists(archiver_drop_off):
@@ -150,7 +151,7 @@ def main():
     item_ws = master_wb['Item']
     cumulative_ws = master_wb['Cumulative']
     
-    print('\nNOTE: Archiver drop off location is at %s; master spreadsheet is at %s' % (archiver_drop_off, master_spreadsheet))
+    print('\nNOTE:\n\tArchiver drop off location is at %s\n\tMaster spreadsheet is at %s' % (archiver_drop_off, master_spreadsheet))
     
     #get unit name and shipment folder
     while True:
@@ -158,15 +159,20 @@ def main():
         
         shipmentDate = input('\nEnter shipment date: ')
         
-        ship_dir = os.path.join('Z:\\', unit_name, 'ingest', shipmentDate)
+        unit_home = os.path.join('Z:\\', unit_name)
+        ship_dir = os.path.join(unit_home, 'ingest', shipmentDate)
         
         if os.path.exists(ship_dir):
             break
         else:
             print('\nWARNING: cannot locate folder %s.  Check unit name and shipment date.' % ship_dir)
             continue
-            
-    packaging_info = os.path.join(ship_dir, 'packaging-info.txt')
+    
+    #make our report directory
+    bag_report_dir = os.path.join(ship_dir, 'bag_reports')
+    if not os.path.exists(bag_report_dir):
+        os.mkdir(bag_report_dir)
+    packaging_info = os.path.join(bag_report_dir, 'packaging-info.txt')
     
     #if we've already worked on this shipment, check for info file; if found, assign variables.
     if os.path.exists(packaging_info):
@@ -210,7 +216,6 @@ def main():
     ws_app = wb['Appraisal']
     
     #folders/files for tracking status
-    bag_report_dir = os.path.join(ship_dir, 'bag_reports')
     deaccession_dir = os.path.join(ship_dir, 'deaccessioned')
     unaccounted_dir = os.path.join(ship_dir, 'unaccounted')
 
@@ -233,13 +238,9 @@ def main():
     duration_doc = os.path.join(bag_report_dir, 'duration.txt')
     stats_doc = os.path.join(bag_report_dir, 'shipment_stats.txt')    
     
-    '''SET UP: GATHER INITIAL STATS AND CHECK FOR INCONSISTENCIES WITH BARCODE FOLDERS IN SHIPMENT'''
-    #make our report directory
-    if not os.path.exists(bag_report_dir):
-        os.mkdir(bag_report_dir)
-    
+    '''SET UP: GATHER INITIAL STATS AND CHECK FOR INCONSISTENCIES WITH BARCODE FOLDERS IN SHIPMENT'''    
     #get list of directories in our shipment folder; make sure these are folders and do not include any folders created during bagging process
-    dir_list = [d for d in os.listdir(ship_dir) if os.path.isdir(os.path.join(ship_dir, d)) and not d in ['review', 'bag_reports', 'unaccounted', 'deaccessioned']]
+    dir_list = [d for d in os.listdir(ship_dir) if os.path.isdir(os.path.join(ship_dir, d)) and not d in ['review', 'bag_reports', 'unaccounted', 'deaccessioned', 'ripstation_reports', 'reports']]
 
     #get list of barcodes from spreadsheet
     spreadsheet_list = []
@@ -636,12 +637,25 @@ def main():
             
                 print('\n\tCreating bag for barcode folder...')
 
+                bag_info_file = os.path.join(bag_report_dir, '%s-bag-info.txt' % item_barcode)
+                
+                if os.path.exists(bag_info_file):
+                    with open(bag_info_file, 'rb') as f:
+                        info = pickle.load(f)
+                    desc = info['description']
+                    
+                else:
+                    #description for bag-info.txt currently includes source media, label transcription, and appraisal note.
+                    desc = 'Source: %s. | Label: %s. | Title: %s. | Appraisal notes: %s. | Date range: %s-%s' %(metadata_dict['content_source_type'], metadata_dict['label_transcription'], metadata_dict.get('item_title', '-'),  metadata_dict['appraisal_notes'], metadata_dict['begin_date'], metadata_dict['end_date'])
+                    
+                    desc = desc.replace('\n', ' ')    
 
-                
-                #description for bag-info.txt currently includes source media, label transcription, and appraisal note.
-                desc = 'Source: %s. | Label: %s. | Title: %s. | Appraisal notes: %s. | Date range: %s-%s' %(metadata_dict['content_source_type'], metadata_dict['label_transcription'], metadata_dict.get('item_title', '-'),  metadata_dict['appraisal_notes'], metadata_dict['begin_date'], metadata_dict['end_date'])
-                
-                desc = desc.replace('\n', ' ')    
+                    with open(bag_info_file, 'wb') as f:
+                        pickle.dump({'description' : desc, 'unit' : unit_name}, f)
+                        
+                #make sure we haven't added a temp_dir if we had to restart packaging
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir) 
         
                 try:
                     bagit.make_bag(destination, {"Source-Organization" : unit_name, "External-Description" : desc, "External-Identifier" : item_barcode}, checksums=["md5"])
@@ -664,8 +678,9 @@ def main():
                 
                 #now get size of destination
                 cmd = 'du -s %s' % destination
-                dir_size = int(subprocess.check_output(cmd, shell=True, text=True).split()[0])
-                
+                output = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+                dir_size = int(output.stdout.split()[0])
+                 
                 #check if the new archive will have sufficient space on disk; include addition 10240 bytes for tar file. Ff so, continue.  If not, exit with a warning
                 available_space = int(free) - (dir_size * 2 + 10240)
                 
@@ -676,20 +691,24 @@ def main():
                 else:
                     print('\tCheck complete; sufficient space for tar file.')
                 
+                #make sure we haven't added a temp_dir to our bag...
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)                
+                
                 #tar folder
                 print('\n\tCreating tar archive...')
-                if 'POL' in item_barcode:
-                    tar_file = '%s.tar.gz' % os.path.basename(destination)
-                    cmd = 'tar -czf %s %s' % (tar_file, os.path.basename(destination))
-                else:
-                    tar_file = '%s.tar' % os.path.basename(destination)
-                    cmd = 'tar -cf %s %s' % (tar_file, os.path.basename(destination))
+
+                tar_file = os.path.join(ship_dir, '%s.tar' % item_barcode)
                 
                 try:
-                    subprocess.check_output(cmd, shell=True)
+                    with tarfile.open(tar_file, "w") as tar:
+                        tar.add(destination, arcname=os.path.basename(destination))
+                        
                     write_list(tarred_list, item_barcode)
+                    
                     print('\tTar archive created')
-                except (RuntimeError, PermissionError, IOError, EnvironmentError, subprocess.CalledProcessError) as e:
+                    
+                except (RuntimeError, PermissionError, IOError, EnvironmentError) as e:
                     print("\tUnexpected error: ", e)
                     write_list(failed_list, '%s\ttar\t%s' % (item_barcode, e))
                     continue
@@ -1049,8 +1068,10 @@ def main():
     wb.save(spreadsheet)
     master_wb.save(master_spreadsheet)
     
-    #save a copy of the master spreadsheet to SDA
+    #save a copy of the master spreadsheet to SDA and completed shipment folders
     shutil.copy(master_spreadsheet, archiver_drop_off)
+    shutil.copy(master_spreadsheet, os.path.join(archiver_home, 'spreadsheets', 'completed_shipments'))
+    shutil.copy(master_spreadsheet, os.path.join(unit_home, 'completed_shipments'))
     
 
 if __name__ == '__main__':

@@ -11,39 +11,115 @@ http://bitarchivist.net
 
 """
 
+import chardet
 from collections import OrderedDict
 from collections import Counter
 import csv
 import datetime
 import errno
+import fnmatch
+import glob
+import hashlib
+import lxml
+from lxml import etree
 import math
+import openpyxl
 import os
+import pickle
+import progressbar
+import psutil
 import re
 import shutil
 import sqlite3
 import subprocess
 import sys
-import uuid
-import xml
-import lxml
-from lxml import etree
 import tempfile
-import fnmatch
+import time
 from tkinter import *
 import tkinter.filedialog
 from tkinter import ttk
-import glob
-import pickle
-import time
-import openpyxl
-import glob
-import hashlib
-import psutil
-import chardet
 from urllib.parse import unquote
+import urllib.request
+import uuid
+import xml
+import zipfile
 
 # from dfxml project
 import Objects
+
+def reporthook(count, block_size, total_size):
+    global start_time
+    if count == 0:
+        start_time = time.time()
+        return
+    duration = time.time() - start_time
+    progress_size = int(count * block_size)
+    try:
+        speed = int(progress_size / (1024 * duration))
+    except ZeroDivisionError:
+        speed = int(progress_size / (1024 * 1))
+    percent = int(count * block_size * 100 / total_size)
+    sys.stdout.write("\r...%d%%, %d MB, %d KB/s, %d seconds passed" %
+                    (percent, progress_size / (1024 * 1024), speed, duration))
+    sys.stdout.flush()
+    
+def update_clamav(version):
+    
+    print('\nUpdating ClamAV...')
+    
+    file = "https://www.clamav.net/downloads/production/clamav-%s-win-x64-portable.zip" % version
+
+    print('\n\tChecking %s...' % file)
+
+    #make sure the URL works; exit if not.  NOTE: may need to change hard-coded URL
+    try:
+        urllib.request.urlopen(file)
+        print('\n\tURL looks good...')
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        print(e, '\n\n%s may be incorrect; check ClamAV download URL')
+        return
+
+    filename = os.path.basename(file)
+
+    #get username so we can download to local Downloads folder
+    username = os.getlogin()
+    downloads = os.path.join('C:\\Users', username, 'Downloads')
+    dest = os.path.join(downloads, filename)
+
+    if os.path.exists(dest):
+        os.remove(dest)
+
+    #download zip file
+    print('\n\tDownloading new version of ClamAV...')
+    urllib.request.urlretrieve(file, dest, reporthook)
+
+
+    #extract contents of zip
+    print('\n\tExtracting contents from zip file...')
+    extract_dest = os.path.join(downloads, 'clamav')
+    if os.path.exists(extract_dest):
+        shutil.rmtree(extract_dest)
+        
+    with zipfile.ZipFile(dest, 'r') as zip_ref:
+        zip_ref.extractall(extract_dest)
+        
+    #copy our freshclam.conf file
+    shutil.copy('C:/BDPL/resources/clamav/freshclam.conf', extract_dest)
+
+    #remove old clamav
+    print('\n\tRemoving old version of ClamAV...')
+    bdpl_dest = 'C:/BDPL/resources/clamav'
+    shutil.rmtree(bdpl_dest)
+
+    #copy over new version
+    print('\n\tMoving new version to %s...' % bdpl_dest)
+    shutil.move(extract_dest, 'C:/BDPL/resources')
+
+    #run freshclam to update definitions
+    print('\n\tUpdating antivirus definitions...\n')
+    subprocess.check_output('freshclam', shell=True, text=True)
+    
+    print('\n\tClamAV update complete!')
 
 def get_encoding(input):
     with open(input, 'rb') as f:
@@ -1799,7 +1875,7 @@ def checkFiles(some_dir):
             else: 
                 continue
             
-    print('\n\nError; no files located at %s. Check settings and run again; you may need to manually copy or extract files.' % some_dir)
+    print('\n\nAttention: no files located at %s.' % some_dir)
     return False
 
 def md5(fname):
@@ -3040,7 +3116,13 @@ def update_software():
     elif os.path.exists(clam_sig2):
         clam_sig = clam_sig2
     else:
-        subprocess.check_output(fresh_up, shell=True, text=True)
+        output = subprocess.run(fresh_up, shell=True, text=True, capture_output=True)
+        
+        #if clamav is outdated, update it
+        if 'OUTDATED!' in output.stderr:
+            version = output.stderr.strip().split('Recommended version: ')[1]
+            update_clamav(version)
+            
         clam_sig = "C:/BDPL/resources/clamav/database/daily.cvd"
         
     file_mod_time = datetime.datetime.fromtimestamp(os.stat(clam_sig).st_mtime).strftime('%Y%m%d')
@@ -3051,8 +3133,14 @@ def update_software():
         print('\n\nUpdating PRONOM and antivirus signatures...')
         
         subprocess.check_output(sfup, shell=True, text=True)
-        subprocess.check_output(fresh_up, shell=True, text=True)
         subprocess.check_output(droid_up, shell=True, text=True)
+        
+        output = subprocess.run(fresh_up, shell=True, text=True, capture_output=True)
+        
+        #if clamav is outdated, update it
+        if 'OUTDATED!' in output.stderr:
+            version = output.stderr.strip().split('Recommended version: ')[1]
+            update_clamav(version)
         
         print('\nUpdate complete!  Time to ingest some date...')
 
