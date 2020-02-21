@@ -95,11 +95,10 @@ def main():
             break
         else:
             continue
-            
-    userdata = os.path.join(ship_dir, 'userdata.txt')
-    if not os.path.exists(userdata):
-        print('\nWARNING: Could not locate userdata.txt file with item barcodes.  Be sure file is located in %s and run script again.' % ship_dir)
-        sys.exit(1)
+    
+    ripstation_reports = os.path.join(ship_dir, 'ripstation_reports')
+    if not os.path.exists(ripstation_reports):
+        os.makedirs(ripstation_reports)
         
     spreadsheet = os.path.join(ship_dir, '%s_%s.xlsx' % (unit_name, shipmentDate))
     if not os.path.exists(spreadsheet):
@@ -107,19 +106,36 @@ def main():
         sys.exit(1)
     
     #track status in these files
-    failed_ingest = os.path.join(ship_dir, 'failed_ingest_ripstation.txt')
-    replicated = os.path.join(ship_dir, 'replicated_ripstation.txt')
-    analyzed = os.path.join(ship_dir, 'analyzed_ripstation.txt')
+    ripstation_reports = os.path.join(ship_dir, 'ripstation_reports')
+    if not os.path.exists(ripstation_reports):
+        os.makedirs(ripstation_reports)
+        
+    failed_ingest = os.path.join(ripstation_reports, 'failed_ingest_ripstation.txt')
+    replicated = os.path.join(ripstation_reports, 'replicated_ripstation.txt')
+    analyzed = os.path.join(ripstation_reports, 'analyzed_ripstation.txt')
     
     #get ripstation log (and its timestamp)
     if rip_option == 'DVD_Data':
         rs_log = os.path.join(ship_dir, 'Log.txt')
+        userdata = os.path.join(ship_dir, 'userdata.txt')
     else:
         rs_log = os.path.join(ship_dir, 'log_cdda.txt')
+        userdata = os.path.join(ship_dir, 'userdata_cdda.txt')
         
     if not os.path.exists(rs_log):
         print('\nWARNING: Could not locate RipStation log in shipment folder.  Be sure file is present and correctly named (Log.txt or log_cdda.txt) and then run script again.')
         sys.exit(1)
+    else:
+        shutil.move(rs_log, ripstation_reports)
+        rs_log = os.path.join(ripstation_reports, os.path.basename(rs_log))
+        
+        
+    if not os.path.exists(userdata):
+        print('\nWARNING: Could not locate userdata.txt file with item barcodes.  Be sure file is located in %s and run script again.' % ship_dir)
+        sys.exit(1)
+    else:
+        shutil.move(userdata, ripstation_reports)
+        userdata = os.path.join(ripstation_reports, os.path.basename(userdata))
         
     #set timestamp variable so we can get YYYY-MM-DD info (ripstation logs only include HH:MM:SS)
     rs_timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(rs_log)).strftime('%Y-%m-%d')

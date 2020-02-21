@@ -59,7 +59,7 @@ def reporthook(count, block_size, total_size):
     except ZeroDivisionError:
         speed = int(progress_size / (1024 * 1))
     percent = int(count * block_size * 100 / total_size)
-    sys.stdout.write("\r...%d%%, %d MB, %d KB/s, %d seconds passed" %
+    sys.stdout.write("\r\t...%d%%, %d MB, %d KB/s, %d seconds passed" %
                     (percent, progress_size / (1024 * 1024), speed, duration))
     sys.stdout.flush()
     
@@ -90,7 +90,7 @@ def update_clamav(version):
         os.remove(dest)
 
     #download zip file
-    print('\n\tDownloading new version of ClamAV...')
+    print('\n\tDownloading new version of ClamAV...\n')
     urllib.request.urlretrieve(file, dest, reporthook)
 
 
