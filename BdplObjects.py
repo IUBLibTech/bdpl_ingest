@@ -4081,7 +4081,7 @@ class McoBatchDeposit(Shipment):
             self.mco_status_db['master_list'] = []
         
         #if 'batch_info' isn't in mco_status_db, add it; this is a dictionary, which tracks each batch and associated identifiers
-        if not 'batch_info' in list(self.mco_status_db.keys()):
+        if not 'batch_info' in list(self.mco_status_db.keys()) or len(self.mco_status_db['batch_info']) == 0:
             self.mco_status_db['batch_info'] = {}
             self.current_batch_no = 0
             self.new_batch()
@@ -4343,7 +4343,7 @@ class McoBatchDeposit(Shipment):
                         self.mco_status_db[self.current_batch_list].append(mco_file_full_path)
             
             #if both our file lists are empty, write error so that we can track later; continue to next item and do not write to batch manifest
-            if len(self.mco_status_db['video_file_list'] + self.mco_status_db['audio_file_list']):
+            if len(self.mco_status_db['video_file_list'] + self.mco_status_db['audio_file_list']) == 0:
                 self.mco_status_db['failed_prep'].append(current_item.identifier)
                 continue
                 
